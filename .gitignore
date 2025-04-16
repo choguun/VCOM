@@ -1,0 +1,28 @@
+# OS generated files
+.DS_Store
+
+# IDE config
+.vscode/
+.idea/
+.cursor/
+
+# Environment
+.env
+
+# Build artifacts
+.next/
+out/
+build/
+
+# Solidity / Hardhat / Foundry
+cache/
+artifacts/
+typechain-types/
+coverage/
+coverage.json
+
+# Foundry
+lib/ 
+
+# Dependency directories
+node_modules/
