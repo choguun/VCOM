@@ -1,4 +1,5 @@
 import React from 'react';
+import MarketplaceList from '@/components/marketplace/MarketplaceList';
 
 const MarketplacePage = () => {
   return (
@@ -7,10 +8,7 @@ const MarketplacePage = () => {
       <p className="text-muted-foreground mb-4">
         Browse and purchase Verifiable Carbon Credits listed for sale.
       </p>
-      {/* Placeholder for Marketplace Listings */}
-      <div className="border rounded-lg p-8 text-center text-muted-foreground">
-        Marketplace listings will appear here...
-      </div>
+      <MarketplaceList />
     </div>
   );
 };

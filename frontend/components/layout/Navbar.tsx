@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button'; // Assuming default shadcn setup
+// import { Button } from '@/components/ui/button'; // No longer needed directly
+import ConnectWallet from './ConnectWallet'; // Import the new component
 
 const Navbar = () => {
   return (
@@ -19,10 +20,8 @@ const Navbar = () => {
           <Link href="/actions" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
             Actions
           </Link>
-          {/* Placeholder for Wallet Connect Button */}
-          <Button variant="outline" size="sm">
-            Connect Wallet
-          </Button>
+          {/* Replace placeholder with actual component */}
+          <ConnectWallet />
         </div>
       </div>
     </nav>

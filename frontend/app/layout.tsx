@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { cn } from "@/lib/utils";
+import { Web3Provider } from "@/components/providers/Web3Provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,13 +26,15 @@ export default function RootLayout({
           inter.className
         )}
       >
-        <div className="flex flex-col min-h-screen">
-          <Navbar />
-          <main className="flex-grow container mx-auto px-4 md:px-6 py-8">
-             {children}
-          </main>
-          <Footer />
-        </div>
+        <Web3Provider>
+          <div className="flex flex-col min-h-screen">
+            <Navbar />
+            <main className="flex-grow container mx-auto px-4 md:px-6 py-8">
+              {children}
+            </main>
+            <Footer />
+          </div>
+        </Web3Provider>
       </body>
     </html>
   );
