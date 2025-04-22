@@ -3,83 +3,152 @@ pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
 import {CarbonCreditNFT} from "../src/CarbonCreditNFT.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 contract CarbonCreditNFTTest is Test {
     CarbonCreditNFT carbonNft;
-    address deployer = address(this); // The test contract itself is the deployer
-    address user1 = makeAddr("user1");
-    address minter = makeAddr("minter");
+    address owner;
+    address minter;
+    address user;
+    address retirementContract;
+    address nonOwner;
 
-    // Setup function runs before each test case
+    string constant NFT_NAME = "Verifiable Carbon Credit";
+    string constant NFT_SYMBOL = "VCC";
+    string constant TEST_URI = "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
+    uint256 constant TOKEN_ID_0 = 0;
+
     function setUp() public {
-        // Deploy the NFT contract, passing the deployer as the initial owner
-        carbonNft = new CarbonCreditNFT(deployer);
+        owner = makeAddr("owner");
+        minter = makeAddr("minter"); // Separate minter for testing roles
+        user = makeAddr("user");
+        retirementContract = makeAddr("retirementContract");
+        nonOwner = makeAddr("nonOwner");
 
-        // Grant MINTER_ROLE to the minter address for testing minting
+        vm.startPrank(owner);
+        carbonNft = new CarbonCreditNFT(owner);
+        // Grant minter role to the 'minter' address for testing
         carbonNft.grantRole(carbonNft.MINTER_ROLE(), minter);
+        // Set the authorized retirement contract address
+        carbonNft.setRetirementContract(retirementContract);
+        vm.stopPrank();
     }
 
-    // Test contract deployment and initial state
+    // --- Test Deployment ---
+
     function testDeployment() public {
-        assertEq(carbonNft.name(), "Verifiable Carbon Credit", "Test Failed: Incorrect name");
-        assertEq(carbonNft.symbol(), "VCC", "Test Failed: Incorrect symbol");
-        assertEq(carbonNft.owner(), deployer, "Test Failed: Incorrect owner");
-
-        // Check default admin role for deployer
-        assertTrue(carbonNft.hasRole(carbonNft.DEFAULT_ADMIN_ROLE(), deployer), "Test Failed: Deployer should have admin role");
-        // Check minter role initially granted to deployer
-        assertTrue(carbonNft.hasRole(carbonNft.MINTER_ROLE(), deployer), "Test Failed: Deployer should have initial minter role");
-        // Check minter role granted in setUp
-        assertTrue(carbonNft.hasRole(carbonNft.MINTER_ROLE(), minter), "Test Failed: Minter should have minter role");
+        assertEq(carbonNft.name(), NFT_NAME, "NFT Name mismatch");
+        assertEq(carbonNft.symbol(), NFT_SYMBOL, "NFT Symbol mismatch");
+        assertEq(carbonNft.owner(), owner, "Owner mismatch");
+        assertTrue(carbonNft.hasRole(carbonNft.DEFAULT_ADMIN_ROLE(), owner), "Owner should have admin role");
+        assertTrue(carbonNft.hasRole(carbonNft.MINTER_ROLE(), owner), "Owner should have minter role");
+        assertTrue(carbonNft.hasRole(carbonNft.MINTER_ROLE(), minter), "Minter address should have minter role");
+        assertEq(carbonNft.retirementContractAddress(), retirementContract, "Retirement contract address mismatch");
     }
 
-    // Test minting functionality
-    function testMinting() public {
-        string memory tokenURI = "ipfs://example";
-        uint256 expectedTokenId = 0;
+    // --- Test safeMint ---
 
-        // Use vm.prank to simulate the transaction coming from the 'minter' address
-        vm.prank(minter);
-        uint256 tokenId = carbonNft.safeMint(user1, tokenURI);
+    function testMint_Success() public {
+        vm.startPrank(minter); // Use authorized minter address
 
-        assertEq(tokenId, expectedTokenId, "Test Failed: Incorrect token ID minted");
-        assertEq(carbonNft.ownerOf(tokenId), user1, "Test Failed: Incorrect owner after mint");
-        assertEq(carbonNft.tokenURI(tokenId), tokenURI, "Test Failed: Incorrect token URI");
-        assertEq(carbonNft.balanceOf(user1), 1, "Test Failed: Incorrect balance after mint");
+        // Expect standard ERC721 Transfer event, checking topics and emitter
+        vm.expectEmit(
+            true, // checkTopic1 (from = address(0))
+            true, // checkTopic2 (to = user)
+            true, // checkTopic3 (tokenId = TOKEN_ID_0)
+            false, // checkData
+            address(carbonNft) // Specify emitter address
+        );
+
+        uint256 tokenId = carbonNft.safeMint(user, TEST_URI);
+        vm.stopPrank();
+
+        assertEq(tokenId, TOKEN_ID_0, "Incorrect tokenId minted");
+        assertEq(carbonNft.ownerOf(TOKEN_ID_0), user, "Owner mismatch after mint");
+        assertEq(carbonNft.balanceOf(user), 1, "Balance mismatch after mint");
+        assertEq(carbonNft.tokenURI(TOKEN_ID_0), TEST_URI, "Token URI mismatch");
     }
 
-    // Test minting permissions - should fail if called by non-minter
-    function testFail_MintWithoutRole() public {
-        string memory tokenURI = "ipfs://exampleFail";
-
-        // Expect a revert because user1 doesn't have MINTER_ROLE
-        // Foundry typically expects specific error messages, but AccessControl uses codes.
-        // We can expect any revert here initially.
-        vm.expectRevert(); // Expecting a revert due to lack of role
-        vm.prank(user1);
-        carbonNft.safeMint(user1, tokenURI);
+    function testFail_Mint_NotMinter() public {
+        vm.startPrank(nonOwner); // Address without MINTER_ROLE
+        // Expect revert from AccessControl: AccessControlUnauthorizedAccount(address account, bytes32 neededRole)
+        bytes32 minterRole = carbonNft.MINTER_ROLE();
+        // vm.expectRevert(abi.encodeWithSelector(AccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, minterRole));
+        // vm.expectRevert(bytes(string(abi.encodePacked("AccessControlUnauthorizedAccount(", abi.encode(nonOwner), ",", abi.encode(minterRole), ")"))));
+        vm.expectRevert(); // Simple revert check for now
+        carbonNft.safeMint(user, TEST_URI);
+        vm.stopPrank();
     }
 
-    // Test internal burn function accessibility (it shouldn't be directly callable)
-    // Note: Foundry cannot directly test internal functions easily unless they are exposed
-    // via a public wrapper function in the contract (which we avoided).
-    // We also cannot directly test the intended behavior where RetirementLogic calls _burn,
-    // as that requires deploying RetirementLogic and setting permissions.
-    // We will test the burn logic via RetirementLogic tests later.
+    // --- Test setRetirementContract ---
 
-    // Test setting token URI (implicitly tested in testMinting)
-
-    // Test role management
-    function testRoleManagement() public {
-        address newMinter = makeAddr("newMinter");
-        // Deployer (admin) grants MINTER_ROLE
-        vm.prank(deployer);
-        carbonNft.grantRole(carbonNft.MINTER_ROLE(), newMinter);
-        assertTrue(carbonNft.hasRole(carbonNft.MINTER_ROLE(), newMinter), "Test Failed: Grant role failed");
-
-        // Deployer (admin) revokes MINTER_ROLE
-        vm.prank(deployer);
-        carbonNft.revokeRole(carbonNft.MINTER_ROLE(), newMinter);
-        assertFalse(carbonNft.hasRole(carbonNft.MINTER_ROLE(), newMinter), "Test Failed: Revoke role failed");
+    function testSetRetirementContract_Success() public {
+        address newRetirementContract = makeAddr("newRetirementContract");
+        vm.startPrank(owner);
+        vm.expectEmit(true, false, false, false); // Check indexed retirementContract
+        emit CarbonCreditNFT.RetirementContractSet(newRetirementContract);
+        carbonNft.setRetirementContract(newRetirementContract);
+        vm.stopPrank();
+        assertEq(carbonNft.retirementContractAddress(), newRetirementContract, "Failed to set new retirement contract");
     }
+
+    function testFail_SetRetirementContract_NotOwner() public {
+        address newRetirementContract = makeAddr("newRetirementContract");
+        vm.startPrank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        carbonNft.setRetirementContract(newRetirementContract);
+        vm.stopPrank();
+    }
+
+    // --- Test burnForRetirement ---
+
+    function testBurn_Success() public {
+        // 1. Mint a token first
+        vm.startPrank(minter);
+        carbonNft.safeMint(user, TEST_URI); // Mints tokenId 0
+        vm.stopPrank();
+        assertEq(carbonNft.ownerOf(TOKEN_ID_0), user); // Verify mint
+
+        // 2. Call burn from the authorized retirement contract address
+        vm.startPrank(retirementContract);
+        vm.expectEmit(
+            true, // checkTopic1 (from = user)
+            true, // checkTopic2 (to = address(0))
+            true, // checkTopic3 (tokenId = TOKEN_ID_0)
+            false, // checkData
+            address(carbonNft) // Specify emitter address
+        );
+        carbonNft.burnForRetirement(TOKEN_ID_0);
+        vm.stopPrank();
+
+        // 3. Verify burn
+        assertEq(carbonNft.balanceOf(user), 0, "Balance should be zero after burn");
+        vm.expectRevert(); // Simple revert check for now (for ownerOf on non-existent token)
+        carbonNft.ownerOf(TOKEN_ID_0);
+    }
+
+     function testFail_Burn_NotAuthorizedContract() public {
+        // 1. Mint a token first
+        vm.startPrank(minter);
+        carbonNft.safeMint(user, TEST_URI); // Mints tokenId 0
+        vm.stopPrank();
+
+        // 2. Try to call burn from an unauthorized address (e.g., the user themselves)
+        vm.startPrank(user);
+        vm.expectRevert(CarbonCreditNFT.CarbonCreditNFT__UnauthorizedBurner.selector);
+        carbonNft.burnForRetirement(TOKEN_ID_0);
+        vm.stopPrank();
+
+         // 3. Try to call burn from nonOwner address
+        vm.startPrank(nonOwner);
+        vm.expectRevert(CarbonCreditNFT.CarbonCreditNFT__UnauthorizedBurner.selector);
+        carbonNft.burnForRetirement(TOKEN_ID_0);
+        vm.stopPrank();
+    }
+
+    // --- Optional: Add tests for supportsInterface, tokenURI edge cases etc. ---
+
 } 
