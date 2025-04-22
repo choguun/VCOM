@@ -15,8 +15,16 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol"; // 
  */
 contract CarbonCreditNFT is ERC721, ERC721URIStorage, AccessControl, Ownable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    // Add a role or address specifically for burning via retirement logic
+    address public retirementContractAddress;
 
     uint256 private _nextTokenId;
+
+    // Event for setting the retirement contract
+    event RetirementContractSet(address indexed retirementContract);
+
+    // Error for unauthorized burner
+    error CarbonCreditNFT__UnauthorizedBurner();
 
     constructor(address initialOwner)
         ERC721("Verifiable Carbon Credit", "VCC")
@@ -46,8 +54,34 @@ contract CarbonCreditNFT is ERC721, ERC721URIStorage, AccessControl, Ownable {
      * by the RetirementLogic contract upon successful retirement.
      * We override the public burn function to prevent accidental burning.
      */
-    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
-        super._burn(tokenId);
+    // function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) { // Removed due to override errors
+    //     super._burn(tokenId);
+    // }
+
+    /**
+     * @dev Burns a token upon request from the authorized RetirementLogic contract.
+     * @param tokenId The ID of the token to burn.
+     */
+    function burnForRetirement(uint256 tokenId) public {
+        // Check caller is the authorized retirement contract
+        if (msg.sender != retirementContractAddress) {
+            revert CarbonCreditNFT__UnauthorizedBurner();
+        }
+        // Check token owner is the caller of the *original* retireNFT function
+        // This check is implicitly handled in RetirementLogic before calling this.
+        // We just need to ensure the RetirementLogic contract calls this.
+        
+        // Use the internal _burn function
+        _burn(tokenId);
+    }
+
+    /**
+     * @notice Sets the address of the contract authorized to burn NFTs for retirement.
+     * @dev Only callable by the owner.
+     */
+    function setRetirementContract(address _retirementContract) external onlyOwner {
+        retirementContractAddress = _retirementContract;
+        emit RetirementContractSet(_retirementContract);
     }
 
     // The following functions are overrides required by Solidity.

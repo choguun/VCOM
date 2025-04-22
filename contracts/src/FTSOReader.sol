@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// Import Flare Interfaces
-import {IFtsoRegistry} from "flare-foundry-periphery-package/coston2/ftso/interface/IFtsoRegistry.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IIFtso} from "flare-foundry-periphery-package/coston2/ftso/interface/IIFtso.sol";
+import {IFtsoRegistry} from "flare-foundry-periphery-package/coston2/IFtsoRegistry.sol";
 
 /**
  * @title FTSOReader
@@ -37,24 +37,27 @@ contract FTSOReader {
      */
     function getFlrUsdPrice() public view returns (uint256 price, uint8 decimals, uint256 timestamp) {
         IFtsoRegistry ftsoRegistry = IFtsoRegistry(ftsoRegistryAddress);
-        address ftsoAddress = ftsoRegistry.getFtsoBySymbol(FLR_SYMBOL);
+        IIFtso ftso = ftsoRegistry.getFtsoBySymbol(FLR_SYMBOL);
 
-        if (ftsoAddress == address(0)) {
+        if (address(ftso) == address(0)) {
             revert FTSOReader__FtsoNotFound();
         }
-
-        IIFtso ftso = IIFtso(ftsoAddress);
 
         // Fetch the current price epoch data
         // Note: Flare price epochs might have finalization delays.
         // Consider using getCurrentPriceWithDecimals or getCurrentPriceEpochData depending on needs.
-        try ftso.getCurrentPriceWithDecimals() returns (uint256 _price, uint256 _timestamp, uint8 _decimals) {
+        try ftso.getCurrentPriceWithDecimals() returns (uint256 _price, uint256 _epochId, uint256 _decimalsIntermediate) {
+            // Success case
             price = _price;
-            decimals = _decimals;
-            timestamp = _timestamp; // This is epoch start timestamp
-        }
-        catch {
-             revert FTSOReader__PriceQueryFailed();
+            decimals = uint8(_decimalsIntermediate);
+            if (uint8(_decimalsIntermediate) != _decimalsIntermediate) {
+                revert FTSOReader__PriceQueryFailed();
+            }
+            timestamp = _epochId; 
+        } catch Error(string memory reason) {
+            revert FTSOReader__PriceQueryFailed();
+        } catch (bytes memory lowLevelData) {
+            revert FTSOReader__PriceQueryFailed();
         }
 
         // Alternative: Fetching specific USD price if the FTSO supports it directly

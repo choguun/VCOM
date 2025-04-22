@@ -1,8 +1,7 @@
 ds-test/=lib/forge-std/lib/ds-test/src/
 forge-std/=lib/forge-std/src/
-openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/
+@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/
+@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 flare-foundry-periphery-package/=lib/flare-foundry-periphery-package/src/
-@openzeppelin-contracts/=lib/flare-foundry-periphery-package/dependencies/@openzeppelin-contracts-5.2.0-rc.1/
-@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/
 halmos-cheatcodes/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/
