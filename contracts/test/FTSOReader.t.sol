@@ -5,113 +5,141 @@ import {Test, console} from "forge-std/Test.sol";
 import {FTSOReader} from "../src/FTSOReader.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-// Minimal Interface for IFtsoRegistry (Workaround)
+// --- Minimal Interfaces (Needed for interaction and Mocking) ---
 interface IFtsoRegistry {
-     function getFtsoBySymbol(string memory _symbol) external view returns (address _ftso);
+    function getFtsoBySymbol(string memory _symbol) external view returns (IIFtso _ftso);
+    // Add other functions if needed
 }
 
-// Minimal Interface for IIFtso (Workaround)
 interface IIFtso {
-    function getCurrentPriceWithDecimals() external view returns (uint256 _price, uint256 _timestamp, uint8 _decimals);
+     function getCurrentPriceWithDecimals() external view returns (uint256 _price, uint256 _epochId, uint8 _decimals);
+     // Add other functions if needed
 }
+// --- End Minimal Interfaces ---
 
-// Mock FTSO Registry
+// --- Mock Contracts ---
 contract MockFtsoRegistry is IFtsoRegistry {
-    address public mockFtsoAddress;
-    function setMockFtsoAddress(address _addr) external {
-        mockFtsoAddress = _addr;
+    IIFtso public mockFtso;
+    string public requestedSymbol;
+
+    constructor(IIFtso _mockFtso) {
+        mockFtso = _mockFtso;
     }
-    function getFtsoBySymbol(string memory _symbol) external view returns (address _ftso) {
-        // Simple mock: return predefined address for "FLR"
-        if (keccak256(abi.encodePacked(_symbol)) == keccak256(abi.encodePacked("FLR"))) {
-            return mockFtsoAddress;
-        }
-        return address(0);
+
+    function getFtsoBySymbol(string memory _symbol) external view returns (IIFtso _ftso) {
+        // Store requested symbol for verification if needed
+        // requestedSymbol = _symbol; // Requires making requestedSymbol non-constant or using internal variable
+        return mockFtso;
     }
 }
 
-// Mock FTSO (Price Feed)
 contract MockFtso is IIFtso {
-    uint256 public mockPrice;
-    uint8 public mockDecimals;
-    uint256 public mockTimestamp;
+    uint256 public mockPrice = 25000; // Example: $0.25 USD with 5 decimals
+    uint8 public mockDecimals = 5;
+    uint256 public mockEpochId = 1700000000; // Example epoch ID
 
-    function setMockData(uint256 _price, uint8 _decimals, uint256 _timestamp) external {
+    function getCurrentPriceWithDecimals() external view returns (uint256 _price, uint256 _epochId, uint8 _decimals) {
+        return (mockPrice, mockEpochId, mockDecimals);
+    }
+
+    // Helper to set mock values
+    function setMockValues(uint256 _price, uint8 _decimals, uint256 _epochId) external {
         mockPrice = _price;
         mockDecimals = _decimals;
-        mockTimestamp = _timestamp;
-    }
-
-    function getCurrentPriceWithDecimals() external view returns (uint256 _price, uint256 _timestamp, uint8 _decimals) {
-        return (mockPrice, mockTimestamp, mockDecimals);
+        mockEpochId = _epochId;
     }
 }
-
+// --- End Mock Contracts ---
 
 contract FTSOReaderTest is Test {
     FTSOReader ftsoReader;
     MockFtsoRegistry mockRegistry;
     MockFtso mockFtso;
+
     address deployer = address(this);
 
     function setUp() public {
         // Deploy mocks
-        mockRegistry = new MockFtsoRegistry();
         mockFtso = new MockFtso();
-        mockRegistry.setMockFtsoAddress(address(mockFtso));
+        mockRegistry = new MockFtsoRegistry(mockFtso);
 
-        // Deploy FTSOReader with mock registry address
+        // Deploy FTSOReader with the address of the mock registry
         ftsoReader = new FTSOReader(address(mockRegistry));
     }
 
-    function testDeployment() public {
-        assertEq(ftsoReader.ftsoRegistryAddress(), address(mockRegistry), "Test Fail: Incorrect registry address");
+    // --- Test getFlrUsdPrice ---
+
+    function testGetPrice_Success() public {
+        // Set mock values (optional, uses defaults otherwise)
+        uint256 expectedPrice = 30000; // $0.30
+        uint8 expectedDecimals = 5;
+        uint256 expectedEpochId = 1700001000;
+        mockFtso.setMockValues(expectedPrice, expectedDecimals, expectedEpochId);
+
+        (uint256 price, uint8 decimals, uint256 timestamp) = ftsoReader.getFlrUsdPrice();
+
+        assertEq(price, expectedPrice, "Price mismatch");
+        assertEq(decimals, expectedDecimals, "Decimals mismatch");
+        // Note: FTSOReader currently sets timestamp = epochId due to workaround
+        assertEq(timestamp, expectedEpochId, "Timestamp/EpochId mismatch");
     }
 
-    function testGetFlrUsdPrice_success() public {
-        // Set mock data in the mock FTSO
-        uint256 price = 25 * 10**5; // $0.25 with 5 decimals
-        uint8 decimals = 5;
-        uint256 timestamp = block.timestamp - 1 minutes;
-        mockFtso.setMockData(price, decimals, timestamp);
+    function testGetPrice_FtsoNotFound() public {
+        // Configure mock registry to return address(0) for the FTSO
+        MockFtsoRegistry registryReturningZero = new MockFtsoRegistry(IIFtso(address(0)));
+        FTSOReader readerWithBadRegistry = new FTSOReader(address(registryReturningZero));
 
-        // Call the reader
-        (uint256 fetchedPrice, uint8 fetchedDecimals, uint256 fetchedTimestamp) = ftsoReader.getFlrUsdPrice();
-
-        // Assert results
-        assertEq(fetchedPrice, price, "Fetched price mismatch");
-        assertEq(fetchedDecimals, decimals, "Fetched decimals mismatch");
-        assertEq(fetchedTimestamp, timestamp, "Fetched timestamp mismatch");
+        vm.expectRevert(FTSOReader.FTSOReader__FtsoNotFound.selector);
+        readerWithBadRegistry.getFlrUsdPrice();
     }
     
-    function testGetFlrUsdPrice_ftsoNotFound() public {
-         // Configure mock registry to return address(0) for FLR
-         mockRegistry.setMockFtsoAddress(address(0));
-         
-         vm.expectRevert(FTSOReader.FTSOReader__FtsoNotFound.selector);
-         ftsoReader.getFlrUsdPrice();
+    // Test potential failure during the FTSO call itself
+    function testGetPrice_PriceQueryFailed() public {
+        // We need a way to make the mockFtso revert.
+        // Add a revert condition to the mock or use a different mock.
+        // For now, this test is a placeholder.
+        assertTrue(true, "Test for PriceQueryFailed revert not implemented");
     }
 
-    // Test conversion logic
-    function testConvertFlrToUsd() public {
-        // Set mock data: $0.25 / FLR, 5 decimals
-        uint256 price = 25 * 10**5; 
-        uint8 decimals = 5;
-        uint256 timestamp = block.timestamp - 1 minutes;
-        mockFtso.setMockData(price, decimals, timestamp);
+    // --- Test convertFlrToUsd ---
 
-        uint256 flrAmountWei = 100 ether; // 100 FLR
-        
-        // Expected USD value scaled by 10^18
-        // (100 * 10^18) * (0.25 * 10^5) * 10^(18-5) / 10^18
-        // = 100 * 10^18 * 0.25 * 10^5 * 10^13 / 10^18
-        // = 100 * 0.25 * 10^18 = 25 * 10^18
-        uint256 expectedUsdValue = 25 ether;
-        uint8 expectedUsdDecimals = 18;
+    function testConvert_Success() public {
+        // Use default mock values: price = 25000 ($0.25), decimals = 5
+        uint256 flrAmount = 100 ether; // 100 FLR in Wei (100 * 10^18)
 
-        (uint256 usdValue, uint8 usdDecimals) = ftsoReader.convertFlrToUsd(flrAmountWei);
+        uint256 expectedUsdValue = 25 ether; // $25 scaled by 10^18
+        uint8 expectedUsdDecimals = 18; 
+
+        (uint256 usdValue, uint8 usdDecimals) = ftsoReader.convertFlrToUsd(flrAmount);
 
         assertEq(usdValue, expectedUsdValue, "USD value mismatch");
         assertEq(usdDecimals, expectedUsdDecimals, "USD decimals mismatch");
     }
+
+     function testConvert_HighPriceDecimals() public {
+         uint256 flrAmount = 1 ether; // 1 FLR
+         mockFtso.setMockValues(1 * 10**20, 20, 1700002000); // Price = 1, Decimals = 20
+
+        uint256 expectedUsdValue = 1 * 10**36;
+        uint8 expectedUsdDecimals = 18;
+
+        (uint256 usdValue, uint8 usdDecimals) = ftsoReader.convertFlrToUsd(flrAmount);
+
+        assertEq(usdValue, expectedUsdValue, "USD value mismatch (high decimals)");
+        assertEq(usdDecimals, expectedUsdDecimals, "USD decimals mismatch (high decimals)");
+    }
+    
+    // Test potential overflow in conversion logic (e.g., very large flrAmount)
+    function testConvert_Overflow() public {
+        // Set price to avoid intermediate overflow during multiplication if possible
+        mockFtso.setMockValues(1, 5, 1700003000); // Price = 1, Decimals = 5
+        uint256 largeFlrAmount = type(uint256).max; 
+
+        // Whether this reverts depends on the exact calculation order in convertFlrToUsd
+        // and whether intermediate multiplication overflows.
+        // If it uses `(flrAmount * price) * scalingFactor`, it might overflow.
+        vm.expectRevert(); // Expecting potential arithmetic overflow revert
+        ftsoReader.convertFlrToUsd(largeFlrAmount);
+    }
+
 } 

@@ -7,45 +7,39 @@ import {RetirementLogic} from "../src/RetirementLogic.sol";
 import {CarbonCreditNFT} from "../src/CarbonCreditNFT.sol"; 
 import {RewardNFT} from "../src/RewardNFT.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+// import {RandomNumberV2Interface} from "flare-foundry-periphery-package/src/flare/RandomNumberV2Interface.sol"; // Import RNG interface
+import {RandomNumberV2Interface} from "flare-foundry-periphery-package/flare/RandomNumberV2Interface.sol"; // Adjusted import path based on remapping
 
-// --- Minimal Interfaces (Workaround for build issues) ---
-interface IFlareDaemon {
-    function requestRandomNumber() external payable returns (bytes32 requestId);
-    function isGenerated(bytes32 _requestId, address _caller, uint256 _randomNumber) external view returns (bool);
-    // Add other functions if needed by RetirementLogic
-}
+// --- Mock RNG Contract ---
+contract MockRandomNumberV2 is RandomNumberV2Interface {
+    uint256 public mockRandomNumber = 1234567890; // Default mock number
+    bool public mockIsSecure = true;
+    uint256 public mockTimestamp = block.timestamp;
 
-interface IFtsoRegistry {
-     function getFtsoBySymbol(string memory _symbol) external view returns (address _ftso);
-     // Add other functions if needed by RetirementLogic
-}
-// --- End Minimal Interfaces ---
-
-// --- Mock Contracts (Optional but helpful for complex interactions) ---
-// For this test, we might not need full mocks yet, but demonstrating structure:
-contract MockFlareDaemon is IFlareDaemon {
-    bytes32 public lastRequestId;
-    uint256 public valueReceived;
-    mapping(bytes32 => bool) public generatedRequests; // Simulate isGenerated
-    mapping(bytes32 => uint256) public storedRandomNumbers; // Store mock random number
-
-    function requestRandomNumber() external payable returns (bytes32 requestId) {
-        valueReceived = msg.value;
-        requestId = keccak256(abi.encodePacked(block.timestamp, msg.sender));
-        lastRequestId = requestId;
-        // Store a predictable random number for testing the callback
-        storedRandomNumbers[requestId] = 123456789; 
-        return requestId;
+    function getRandomNumber()
+        external view
+        returns (
+            uint256 _randomNumber,
+            bool _isSecureRandom,
+            uint256 _randomTimestamp
+        )
+    {
+        return (mockRandomNumber, mockIsSecure, mockTimestamp);
     }
 
-    function isGenerated(bytes32 _requestId, address _caller, uint256 _randomNumber) external view returns (bool) {
-        // Simple mock: Returns true if the request ID exists and number matches
-        return generatedRequests[_requestId] && storedRandomNumbers[_requestId] == _randomNumber;
+    function getRandomNumberHistorical(uint256 _votingRoundId) 
+        external view 
+        returns (uint256, bool, uint256) 
+    { 
+        // Not needed for current tests, revert or return default 
+        revert("MockRandomNumberV2: getRandomNumberHistorical not implemented");
     }
     
-    // Helper to mark a request as generated for callback tests
-    function setGenerated(bytes32 _requestId) external {
-        generatedRequests[_requestId] = true;
+    // Helper functions to control mock behavior
+    function setMockValues(uint256 _number, bool _isSecure) external {
+        mockRandomNumber = _number;
+        mockIsSecure = _isSecure;
+        mockTimestamp = block.timestamp;
     }
 }
 
@@ -55,88 +49,130 @@ contract RetirementLogicTest is Test {
     RetirementLogic retirementLogic;
     CarbonCreditNFT carbonNft;
     RewardNFT rewardNft;
-    MockFlareDaemon mockDaemon;
-    // FTSO Registry - can be a dummy address if not strictly needed by current logic
-    address ftsoRegistry = address(0xdead); 
+    MockRandomNumberV2 mockRng; // Use the mock RNG
 
     // Users
-    address deployer = address(this);
+    address deployer = address(this); // Keep deployer for potential future use
+    address owner; // Owner of the contracts
     address user;
 
     // Constants
     uint256 constant NFT_ID_TO_RETIRE = 0;
-    uint256 constant RNG_FEE = 0.1 ether; // Match constant in RetirementLogic
+    uint256 constant TOKEN_ID_0 = 0; // Add constant for expected reward token ID
 
     function setUp() public {
         // Create users
-        address owner = makeAddr("owner");
-        user = makeAddr("user"); // Make user a state variable if needed in tests
+        owner = makeAddr("owner");
+        user = makeAddr("user");
 
         // Deploy contracts
         vm.startPrank(owner);
         
-        // 1. Deploy CarbonCreditNFT (only needs owner)
         carbonNft = new CarbonCreditNFT(owner);
-        
-        // 2. Deploy RewardNFT (needs owner and retirementLogic address, deploy with 0 initially)
         rewardNft = new RewardNFT(owner, address(0)); 
+        retirementLogic = new RetirementLogic(owner, address(carbonNft), address(rewardNft));
+        mockRng = new MockRandomNumberV2(); // Deploy the mock RNG
 
-        // 3. Deploy RetirementLogic (needs owner, carbonNft, rewardNft addresses)
-        retirementLogic = new RetirementLogic(
-            owner, 
-            address(carbonNft), 
-            address(rewardNft)
-        );
+        // --- Overwrite hardcoded RNG address in RetirementLogic using vm.store ---
+        // 1. Find the storage slot for randomNumberV2Address (it's the first state variable after Ownable)
+        // Ownable uses 1 slot (owner). ReentrancyGuard uses 1 slot (_status).
+        // randomNumberV2Address is the 3rd variable = slot 2 (0-indexed)
+        bytes32 slot = bytes32(uint256(2)); 
+        // 2. Store the mockRng address in that slot for the retirementLogic instance
+        vm.store(address(retirementLogic), slot, bytes32(uint256(uint160(address(mockRng)))));
+        // Verify the overwrite worked (optional but good practice)
+        // assertEq(bytes32(uint256(uint160(retirementLogic.randomNumberV2Address()))), bytes32(uint256(uint160(address(mockRng)))));
+        // Note: Direct reading of immutable might not work easily, but vm.load can check the slot value
 
-        // 4. Set authorized addresses
-        // CarbonCreditNFT: Set RetirementLogic address for burning
+        // Set authorized addresses
         carbonNft.setRetirementContract(address(retirementLogic));
-        // RewardNFT: Set RetirementLogic address for minting
         rewardNft.setRetirementLogicAddress(address(retirementLogic));
         
-        // Mint an NFT to the user (owner has MINTER_ROLE by default)
-        carbonNft.safeMint(user, "ipfs://some_uri"); // Correct signature (to, uri)
-        // NOTE: This assumes the first token minted will have ID 0 (NFT_ID_TO_RETIRE)
+        // Mint an NFT to the user 
+        carbonNft.safeMint(user, "ipfs://some_uri"); 
         
         vm.stopPrank();
     }
 
     // --- retireNFT Tests ---
 
-    // function testRetireNFT_Success() public {
-    //     // User approves RetirementLogic contract
-    //     vm.startPrank(user);
-    //     carbonNft.approve(address(retirementLogic), NFT_ID_TO_RETIRE);
+    // function testRetireNFT_Success() public { ... } // Keep commented for now
+    function testRetireNFT_Success_Tier0Reward() public {
+        // Set mock RNG to return a specific number resulting in tier 0 (e.g., number >= 10)
+        // and ensure it's marked secure
+        uint256 mockRandomNum = 50; // Example number >= 10
+        uint256 expectedRewardTier = 0;
+        mockRng.setMockValues(mockRandomNum, true);
+        uint256 expectedTimestamp = mockRng.mockTimestamp(); // Get timestamp set by mock
 
-    //     // --- Set Expectations BEFORE the call ---
-        
-    //     // Expect NFTRetired event from RetirementLogic
-    //     // Check indexed topics: user, tokenId, rewardTier. Ignore non-indexed randomNumber, randomTimestamp.
-    //     vm.expectEmit(true, true, true, false); 
-    //     emit RetirementLogic.NFTRetired(user, NFT_ID_TO_RETIRE, 0, 0, 0); // Expect tier 0 for now
+        // User approves RetirementLogic contract
+        vm.startPrank(user);
+        carbonNft.approve(address(retirementLogic), NFT_ID_TO_RETIRE);
 
-    //     // Expect standard ERC721 Transfer event from RewardNFT upon minting
-    //     // Check indexed topics: from, to, tokenId AND emitter address.
-    //     vm.expectEmit(
-    //         true, // checkTopic1 (from)
-    //         true, // checkTopic2 (to)
-    //         true, // checkTopic3 (tokenId)
-    //         false, // checkData
-    //         address(rewardNft) // Specify emitter address
-    //     );
+        // --- Set Expectations BEFORE the call ---
+        vm.expectEmit(true, true, true, false); 
+        emit RetirementLogic.NFTRetired(user, NFT_ID_TO_RETIRE, expectedRewardTier, mockRandomNum, expectedTimestamp);
 
-    //     // --- Call the function --- 
-    //     retirementLogic.retireNFT(NFT_ID_TO_RETIRE);
-    //     vm.stopPrank();
+        // Expect standard ERC721 Transfer event from RewardNFT upon minting
+        vm.expectEmit(true, true, true, false, address(rewardNft)); // Check topics and emitter
 
-    //     // --- Assertions AFTER the call ---
-    //     vm.expectRevert(abi.encodeWithSelector(ERC721.ERC721NonexistentToken.selector, NFT_ID_TO_RETIRE));
-    //     carbonNft.ownerOf(NFT_ID_TO_RETIRE); // Verify NFT is burned
-    // }
+        // --- Call the function ---
+        retirementLogic.retireNFT(NFT_ID_TO_RETIRE);
+        vm.stopPrank();
+
+        // --- Assertions AFTER the call ---
+        vm.expectRevert(); // Simple revert check
+        carbonNft.ownerOf(NFT_ID_TO_RETIRE); // Verify Carbon NFT is burned
+
+        assertEq(rewardNft.balanceOf(user), 1, "Reward NFT should be minted");
+        assertEq(rewardNft.ownerOf(TOKEN_ID_0), user, "Reward NFT owner mismatch");
+        assertEq(rewardNft.rewardTiers(TOKEN_ID_0), expectedRewardTier, "Reward tier mismatch");
+    }
+
+    function testRetireNFT_Success_Tier1Reward() public {
+        // Set mock RNG to return a specific number resulting in tier 1 (e.g., number < 10)
+        uint256 mockRandomNum = 5; // Example number < 10
+        uint256 expectedRewardTier = 1;
+        mockRng.setMockValues(mockRandomNum, true);
+         uint256 expectedTimestamp = mockRng.mockTimestamp();
+
+        vm.startPrank(user);
+        carbonNft.approve(address(retirementLogic), NFT_ID_TO_RETIRE);
+
+        vm.expectEmit(true, true, true, false);
+        emit RetirementLogic.NFTRetired(user, NFT_ID_TO_RETIRE, expectedRewardTier, mockRandomNum, expectedTimestamp);
+        vm.expectEmit(true, true, true, false, address(rewardNft)); // Check topics and emitter
+
+        retirementLogic.retireNFT(NFT_ID_TO_RETIRE);
+        vm.stopPrank();
+
+        vm.expectRevert(); // Simple revert check
+        carbonNft.ownerOf(NFT_ID_TO_RETIRE);
+        assertEq(rewardNft.balanceOf(user), 1);
+        assertEq(rewardNft.ownerOf(TOKEN_ID_0), user);
+        assertEq(rewardNft.rewardTiers(TOKEN_ID_0), expectedRewardTier);
+    }
+
+
+    function testFail_RetireNFT_RngNotSecure() public {
+        // Set mock RNG to return isSecure = false
+        mockRng.setMockValues(12345, false);
+
+        vm.startPrank(user);
+        carbonNft.approve(address(retirementLogic), NFT_ID_TO_RETIRE);
+
+        vm.expectRevert(RetirementLogic.RetirementLogic__RngNotSecure.selector);
+        retirementLogic.retireNFT(NFT_ID_TO_RETIRE);
+        vm.stopPrank();
+
+        // Verify Carbon NFT was NOT burned
+        assertEq(carbonNft.ownerOf(NFT_ID_TO_RETIRE), user, "Carbon NFT should not have been burned");
+        // Verify Reward NFT was NOT minted
+         assertEq(rewardNft.balanceOf(user), 0, "Reward NFT should not have been minted");
+    }
 
     function testRetireNFT_RevertIf_NotOwner() public {
-        // Another user (owner) tries to retire the user's NFT
-        vm.startPrank(deployer); // Using deployer here, assuming distinct from 'owner' in setUp if needed
+        vm.startPrank(owner); // Use owner who is not the NFT holder
         vm.expectRevert(RetirementLogic.RetirementLogic__NotNFTOwner.selector);
         retirementLogic.retireNFT(NFT_ID_TO_RETIRE);
         vm.stopPrank();

@@ -40,12 +40,14 @@ contract Marketplace is Ownable, ReentrancyGuard {
     event ListingCancelled(uint256 indexed listingId);
 
     // Errors
+    error Marketplace__PriceMustBeAboveZero();
     error Marketplace__NotApprovedForTransfer();
     error Marketplace__ListingNotFound();
     error Marketplace__ListingNotActive();
     error Marketplace__NotOwnerOfListing();
     error Marketplace__IncorrectPriceSent();
     error Marketplace__TransferFailed();
+    error Marketplace__CannotBuyOwnItem();
 
     constructor(address initialOwner)
         Ownable(initialOwner)
@@ -60,6 +62,9 @@ contract Marketplace is Ownable, ReentrancyGuard {
      */
     function listItem(address nftContract, uint256 tokenId, uint256 priceInFLR) public nonReentrant {
         IERC721 nft = IERC721(nftContract);
+        if (priceInFLR == 0) {
+            revert Marketplace__PriceMustBeAboveZero();
+        }
         if (nft.getApproved(tokenId) != address(this) && !nft.isApprovedForAll(msg.sender, address(this))) {
             revert Marketplace__NotApprovedForTransfer();
         }
@@ -95,6 +100,9 @@ contract Marketplace is Ownable, ReentrancyGuard {
         }
         if (msg.value != listing.priceInFLR) {
             revert Marketplace__IncorrectPriceSent();
+        }
+        if (listing.seller == msg.sender) {
+            revert Marketplace__CannotBuyOwnItem();
         }
 
         address seller = listing.seller;
