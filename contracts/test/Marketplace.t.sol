@@ -148,12 +148,14 @@ contract MarketplaceTest is Test {
     }
 
     function testBuyItem_RevertIf_ListingNotActive() public {
-         // 1. Seller lists item (Need listingId = 0 from event)
+         // 1. Seller lists item and capture listingId
         vm.startPrank(seller);
         testNft.approve(address(marketplace), NFT_ID_1);
+        vm.recordLogs(); // Start recording before listItem
         marketplace.listItem(address(testNft), NFT_ID_1, LISTING_PRICE);
+        Vm.Log[] memory listEntries = vm.getRecordedLogs();
         vm.stopPrank();
-        uint256 listingIdToInteract = 0; // Placeholder - MUST CAPTURE FROM EVENT
+        uint256 listingIdToInteract = _findListingIdFromLogs(listEntries, ITEMLISTED_SIG, seller, address(testNft));
 
         // 2. Buyer buys it once
         vm.startPrank(buyer);
@@ -169,12 +171,14 @@ contract MarketplaceTest is Test {
     }
 
     function testBuyItem_RevertIf_IncorrectPrice() public {
-        // 1. Seller lists item (Need listingId = 0 from event)
+        // 1. Seller lists item and capture listingId
         vm.startPrank(seller);
         testNft.approve(address(marketplace), NFT_ID_1);
+        vm.recordLogs(); // Start recording before listItem
         marketplace.listItem(address(testNft), NFT_ID_1, LISTING_PRICE);
+        Vm.Log[] memory listEntries = vm.getRecordedLogs();
         vm.stopPrank();
-        uint256 listingIdToBuy = 0; // Placeholder - MUST CAPTURE FROM EVENT
+        uint256 listingIdToBuy = _findListingIdFromLogs(listEntries, ITEMLISTED_SIG, seller, address(testNft));
 
         // 2. Buyer tries to buy with less value
         vm.startPrank(buyer);
@@ -184,12 +188,14 @@ contract MarketplaceTest is Test {
     }
 
     function testBuyItem_RevertIf_SellerBuysOwnItem() public {
-        // 1. Seller lists item (Need listingId = 0 from event)
+        // 1. Seller lists item and capture listingId
         vm.startPrank(seller);
         testNft.approve(address(marketplace), NFT_ID_1);
+        vm.recordLogs(); // Start recording before listItem
         marketplace.listItem(address(testNft), NFT_ID_1, LISTING_PRICE);
+        Vm.Log[] memory listEntries = vm.getRecordedLogs();
         vm.stopPrank();
-        uint256 listingIdToBuy = 0; // Placeholder - MUST CAPTURE FROM EVENT
+        uint256 listingIdToBuy = _findListingIdFromLogs(listEntries, ITEMLISTED_SIG, seller, address(testNft));
 
         // 2. Seller tries to buy own item
         vm.startPrank(seller);
@@ -244,10 +250,10 @@ contract MarketplaceTest is Test {
     }
 
     function testCancelListing_RevertIf_ListingNotActive() public {
-         // 1. Seller lists item
+         // 1. Seller lists item and capture listingId
         vm.startPrank(seller);
         testNft.approve(address(marketplace), NFT_ID_1);
-        vm.recordLogs();
+        vm.recordLogs(); // Start recording before listItem
         marketplace.listItem(address(testNft), NFT_ID_1, LISTING_PRICE);
         Vm.Log[] memory listEntries = vm.getRecordedLogs();
         vm.stopPrank();

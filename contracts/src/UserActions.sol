@@ -11,6 +11,8 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  */
 contract UserActions is Ownable, ReentrancyGuard {
 
+    address public attestationVerifierAddress; // Address of the trusted AttestationVerifier contract
+
     // Struct to store details of a recorded action (optional, could use mapping directly)
     // struct ActionRecord {
     //     address user;
@@ -32,23 +34,43 @@ contract UserActions is Ownable, ReentrancyGuard {
         uint256 timestamp,
         bytes proofData // Include proof data hash or identifier
     );
+    event AttestationVerifierSet(address indexed newVerifier); // Event for updating the verifier
 
     // Errors
     error UserActions__ActionAlreadyRecorded(); // Or based on timestamp check
     error UserActions__InvalidActionType(); // If using predefined types
     error UserActions__TimestampTooOld(); // Prevent recording very old actions
+    error UserActions__NotAttestationVerifier(); // Error for unauthorized caller
 
 
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    /**
+     * @param _initialOwner The initial owner of the contract.
+     * @param _attestationVerifierAddress The address of the trusted AttestationVerifier contract.
+     */
+    constructor(address _initialOwner, address _attestationVerifierAddress) Ownable(_initialOwner) {
+        require(_attestationVerifierAddress != address(0), "Invalid verifier address");
+        attestationVerifierAddress = _attestationVerifierAddress;
+        emit AttestationVerifierSet(_attestationVerifierAddress);
+    }
+
+    /**
+     * @dev Modifier to restrict function calls to the designated AttestationVerifier contract.
+     */
+    modifier onlyAttestationVerifier() {
+        if (msg.sender != attestationVerifierAddress) {
+            revert UserActions__NotAttestationVerifier();
+        }
+        _;
+    }
 
     /**
      * @notice Records a verified user action based on FDC proof.
-     * @dev Currently callable only by the owner. Will later be called by an Attestation Verifier.
+     * @dev Callable only by the trusted AttestationVerifier contract.
      * Includes basic replay protection based on timestamp.
      * @param user The user who performed the action.
      * @param actionType An identifier for the type of action (e.g., keccak256("HIGH_TEMP_SEOUL")).
      * @param timestamp The timestamp associated with the verified action (e.g., from FDC proof).
-     * @param proofData The FDC proof data or a hash of it.
+     * @param proofData The FDC proof data or a hash of it (content validated by AttestationVerifier).
      */
     function recordVerifiedAction(
         address user,
@@ -57,7 +79,7 @@ contract UserActions is Ownable, ReentrancyGuard {
         bytes calldata proofData // Use calldata for external calls
     )
         external
-        onlyOwner // Replace with attestation verifier check later
+        onlyAttestationVerifier // Replaced onlyOwner with this modifier
         nonReentrant
     {
         // Basic replay/ordering protection: ensure timestamp is newer than last recorded for this user/type
@@ -65,10 +87,7 @@ contract UserActions is Ownable, ReentrancyGuard {
             revert UserActions__TimestampTooOld(); // Or a more specific replay error
         }
 
-        // --- Future FDC Proof Verification Would Go Here ---
-        // This section would involve interacting with FDC contracts
-        // to verify the validity and content of proofData based on actionType and timestamp.
-        // For now, we assume the proof is valid as only the owner can call this.
+        // FDC Proof Verification is now assumed to be handled by the AttestationVerifier before calling this function.
 
         // Store the latest timestamp
         lastActionTimestamp[user][actionType] = timestamp;
@@ -82,6 +101,16 @@ contract UserActions is Ownable, ReentrancyGuard {
         //     revert UserActions__ActionAlreadyRecorded();
         // }
         // isActionRecorded[recordHash] = true;
+    }
+
+    /**
+     * @notice Allows the owner to update the address of the trusted AttestationVerifier contract.
+     * @param _newVerifierAddress The new address for the AttestationVerifier.
+     */
+    function setAttestationVerifierAddress(address _newVerifierAddress) external onlyOwner {
+        require(_newVerifierAddress != address(0), "Invalid verifier address");
+        attestationVerifierAddress = _newVerifierAddress;
+        emit AttestationVerifierSet(_newVerifierAddress);
     }
 
     // --- Potential Future Functions ---

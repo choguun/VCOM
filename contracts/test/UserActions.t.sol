@@ -23,18 +23,21 @@ contract UserActionsTest is Test {
         nonOwner = makeAddr("nonOwner");
 
         vm.startPrank(owner);
-        userActions = new UserActions(owner); // Constructor only takes owner
+        // Provide both owner and a mock verifier address (using address(this) for the test contract)
+        userActions = new UserActions(owner, address(this)); 
         vm.stopPrank();
     }
 
     function testDeployment() public {
         assertEq(userActions.owner(), owner, "Test Fail: Incorrect owner");
+        assertEq(userActions.attestationVerifierAddress(), address(this), "Test Fail: Incorrect verifier address");
     }
 
     // --- Test recordVerifiedAction ---
 
     function test_RecordAction_Success() public {
-        vm.startPrank(owner);
+        // Call from the designated verifier (address(this) in setup)
+        vm.startPrank(address(this));
 
         // Expect event emission
         vm.expectEmit(true, true, false, false); // Check indexed user, actionType. Ignore timestamp, proofData.
@@ -49,16 +52,23 @@ contract UserActionsTest is Test {
         vm.stopPrank();
     }
 
-    function testFail_RecordAction_NotOwner() public {
-        vm.startPrank(nonOwner);
-        // Expect revert from Ownable modifier
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner)); 
+    function testFail_RecordAction_NotVerifier() public {
+        // Try calling from non-verifier (even owner)
+        vm.startPrank(owner); 
+        vm.expectRevert(UserActions.UserActions__NotAttestationVerifier.selector);
+        userActions.recordVerifiedAction(user, ACTION_TYPE_TEMP, ACTION_TIMESTAMP, proofData);
+        vm.stopPrank();
+
+        // Try calling from another non-verifier
+        vm.startPrank(nonOwner); 
+        vm.expectRevert(UserActions.UserActions__NotAttestationVerifier.selector);
         userActions.recordVerifiedAction(user, ACTION_TYPE_TEMP, ACTION_TIMESTAMP, proofData);
         vm.stopPrank();
     }
 
     function testFail_RecordAction_TimestampTooOld() public {
-        vm.startPrank(owner);
+        // Call from the designated verifier
+        vm.startPrank(address(this));
 
         // Record initial action
         userActions.recordVerifiedAction(user, ACTION_TYPE_TEMP, ACTION_TIMESTAMP, proofData);
@@ -75,7 +85,8 @@ contract UserActionsTest is Test {
     }
     
     function test_RecordAction_AllowsDifferentActionType() public {
-        vm.startPrank(owner);
+        // Call from the designated verifier
+        vm.startPrank(address(this));
         bytes32 anotherActionType = keccak256("ANOTHER_ACTION");
 
         // Record initial action
@@ -95,4 +106,32 @@ contract UserActionsTest is Test {
         // Placeholder for now, can be implemented if needed.
         assertTrue(true, "Reentrancy test not implemented");
     }
+
+    // --- Test setAttestationVerifierAddress ---
+
+    function test_SetAttestationVerifierAddress_Success() public {
+        address newVerifier = makeAddr("newVerifier");
+        vm.startPrank(owner);
+        vm.expectEmit(true, false, false, false); // Check indexed newVerifier
+        emit UserActions.AttestationVerifierSet(newVerifier);
+        userActions.setAttestationVerifierAddress(newVerifier);
+        assertEq(userActions.attestationVerifierAddress(), newVerifier, "Test Fail: Verifier not updated");
+        vm.stopPrank();
+    }
+
+    function testFail_SetAttestationVerifierAddress_NotOwner() public {
+        address newVerifier = makeAddr("newVerifier");
+        vm.startPrank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        userActions.setAttestationVerifierAddress(newVerifier);
+        vm.stopPrank();
+    }
+
+    function testFail_SetAttestationVerifierAddress_ZeroAddress() public {
+        vm.startPrank(owner);
+        vm.expectRevert("Invalid verifier address");
+        userActions.setAttestationVerifierAddress(address(0));
+        vm.stopPrank();
+    }
+
 } 
