@@ -492,16 +492,24 @@ export default function MyAssetsPage() {
     // Helper to render NFT cards
     const renderNftCard = (nft: OwnedNft) => {
         const isCurrentlyRetiring = isRetirePending && retiringNftId === nft.id;
-        const isCurrentlyListing = !!nftToList; // Check if the list dialog is targeting *any* NFT (could be more specific)
+        const isCurrentlyListing = !!nftToList; // Check if the list dialog is targeting *any* NFT
+        
+        // --- Determine placeholder image based on contract address --- 
+        const placeholderImageSrc = nft.contractAddress === REWARD_NFT_ADDRESS 
+            ? "/placeholder-reward-nft.jpg" 
+            : "/placeholder-nft.jpg";
         
         return (
             <Card key={`${nft.contractAddress}-${nft.id}`}>
                 <CardHeader>
                     <div className="aspect-square bg-muted rounded-md mb-2 flex items-center justify-center overflow-hidden">
                          <img 
-                            src="/placeholder-nft.jpg" 
+                            // Use the determined placeholder image source
+                            src={placeholderImageSrc} 
                             alt={nft.metadata?.name || `Token #${nft.id}`}
                             className="object-contain w-full h-full" 
+                            // Add error handling for image loading if desired
+                            // onError={(e) => (e.currentTarget.src = '/fallback-image.jpg')} 
                          />
                     </div>
                     <CardTitle className="text-lg truncate">{nft.metadata?.name || `Token #${nft.id}`}</CardTitle>
@@ -519,9 +527,8 @@ export default function MyAssetsPage() {
                             {/* List Button */}
                             <Button
                                 size="sm"
-                                variant="outline" // Change variant for distinction
+                                variant="outline"
                                 onClick={() => handleOpenListDialog(nft)}
-                                // Disable if retiring this OR if any listing dialog is open (simplification)
                                 disabled={isCurrentlyRetiring || isRetireTxLoading || isListDialogOpen}
                             >
                                 List
@@ -529,9 +536,8 @@ export default function MyAssetsPage() {
                             {/* Retire Button */}
                             <Button
                                 size="sm"
-                                variant="destructive" // Use destructive variant for retirement
+                                variant="destructive"
                                 onClick={() => handleRetire(nft.contractAddress, nft.id)}
-                                // Disable if retiring this OR if any listing dialog is open
                                 disabled={isCurrentlyRetiring || isRetireTxLoading || isRetirePending || isListDialogOpen}
                             >
                                 {isCurrentlyRetiring ? "Retiring..." : "Retire"}
