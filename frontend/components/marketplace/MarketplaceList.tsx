@@ -6,7 +6,7 @@ import { useReadContract } from 'wagmi';
 import { parseAbiItem } from 'viem'; // For defining ABI items
 
 // --- Contract Config --- TODO: Move to a central config file later
-const MARKETPLACE_CONTRACT_ADDRESS = "0x..."; // <-- REPLACE WITH ACTUAL DEPLOYED ADDRESS
+const MARKETPLACE_CONTRACT_ADDRESS = "0xd06b5a486f7239AE03a0af3e38E2041c932B0920"; // <-- REPLACE WITH ACTUAL DEPLOYED ADDRESS
 
 // Manually define ABI fragments for Marketplace contract
 const marketplaceAbi = [

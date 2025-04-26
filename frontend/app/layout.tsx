@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { cn } from "@/lib/utils";
 import { Web3Provider } from "@/components/providers/Web3Provider";
+import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +35,7 @@ export default function RootLayout({
             </main>
             <Footer />
           </div>
+          <Toaster richColors />
         </Web3Provider>
       </body>
     </html>

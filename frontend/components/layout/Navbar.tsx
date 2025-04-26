@@ -1,30 +1,53 @@
 import React from 'react';
 import Link from 'next/link';
-// import { Button } from '@/components/ui/button'; // No longer needed directly
-import ConnectWallet from './ConnectWallet'; // Import the new component
+import ConnectWallet from './ConnectWallet'; // Assuming ConnectWallet is in the same directory
+import { Button } from '@/components/ui/button';
 
 const Navbar = () => {
   return (
-    <nav className="border-b bg-background">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
-        <Link href="/" className="font-bold text-lg">
-          VCOM
-        </Link>
-        <div className="flex items-center space-x-4">
-          <Link href="/marketplace" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-            Marketplace
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 max-w-screen-2xl items-center">
+        <div className="mr-4 hidden md:flex">
+          <Link href="/" className="mr-6 flex items-center space-x-2">
+            {/* Placeholder for Logo */} 
+            <span className="hidden font-bold sm:inline-block">
+              VCOMarketplace
+            </span>
           </Link>
-          <Link href="/my-assets" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-            My Assets
-          </Link>
-          <Link href="/actions" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-            Actions
-          </Link>
-          {/* Replace placeholder with actual component */}
+          <nav className="flex items-center gap-4 text-sm lg:gap-6">
+            <Link
+              href="/"
+              className="transition-colors hover:text-foreground/80 text-foreground/60"
+            >
+              Marketplace
+            </Link>
+            <Link
+              href="/my-assets"
+              className="transition-colors hover:text-foreground/80 text-foreground/60"
+            >
+              My Assets
+            </Link>
+            <Link
+              href="/actions"
+              className="transition-colors hover:text-foreground/80 text-foreground/60"
+            >
+              Actions
+            </Link>
+            <Link
+              href="/mint"
+              className="transition-colors hover:text-foreground/80 text-foreground/60"
+            >
+              Mint (Admin)
+            </Link>
+            {/* Add other nav links as needed */}
+          </nav>
+        </div>
+        {/* Add mobile menu button here if needed */}
+        <div className="flex flex-1 items-center justify-end space-x-2">
           <ConnectWallet />
         </div>
       </div>
-    </nav>
+    </header>
   );
 };
 
