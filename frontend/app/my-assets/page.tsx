@@ -109,7 +109,7 @@ interface OwnedNft {
     // Removed isLoading/error per item, handle loading/error globally for stages
 }
 
-// --- fetchMetadata Helper (keep as is) ---
+// --- fetchMetadata Helper ---
 async function fetchMetadata(tokenUri: string): Promise<{ metadata: NftMetadata | null; error?: string }> {
     if (!tokenUri) {
         return { metadata: null, error: "Token URI is empty." };
@@ -119,61 +119,83 @@ async function fetchMetadata(tokenUri: string): Promise<{ metadata: NftMetadata 
     if (tokenUri === 'ipfs://METADATA_PLACEHOLDER') { 
         return { metadata: null, error: "Metadata not available (placeholder)." };
     }
+    
+    // --- NEW: Check for Base64 JSON data URI --- 
+    const base64Prefix = "data:application/json;base64,";
+    if (tokenUri.startsWith(base64Prefix)) {
+        console.log("Handling Base64 JSON URI for:", tokenUri.substring(0, 60) + "...");
+        try {
+            const base64Data = tokenUri.substring(base64Prefix.length);
+            const jsonString = Buffer.from(base64Data, 'base64').toString('utf-8');
+            const metadata = JSON.parse(jsonString);
+            // Basic validation
+            if (typeof metadata === 'object' && metadata !== null) {
+                return { metadata: metadata as NftMetadata };
+            }
+            return { metadata: null, error: "Invalid Base64 JSON metadata format" };
+        } catch (e: any) {
+            console.error("Failed to parse Base64 JSON metadata:", e);
+            return { metadata: null, error: `Failed to parse Base64 JSON metadata: ${e.message}` };
+        }
+    }
+    // --- END NEW CHECK --- 
 
-    // 2. Check if it looks like a JSON string (On-Chain JSON)
+    // 2. Check if it looks like a raw JSON string (On-Chain JSON)
+    //    (This check might be less likely if Base64 is used, but keep for robustness)
     if (tokenUri.startsWith('{') && tokenUri.endsWith('}')) {
+        console.log("Handling raw JSON URI for:", tokenUri.substring(0, 60) + "...");
         try {
             const metadata = JSON.parse(tokenUri);
             // Basic validation
             if (typeof metadata === 'object' && metadata !== null) {
                 return { metadata: metadata as NftMetadata };
             }
-            return { metadata: null, error: "Invalid on-chain JSON metadata format" };
-        } catch (e) {
-            console.error("Failed to parse on-chain JSON metadata:", e);
-            return { metadata: null, error: "Failed to parse on-chain JSON metadata." };
+            return { metadata: null, error: "Invalid on-chain raw JSON metadata format" };
+        } catch (e: any) {
+            console.error("Failed to parse on-chain raw JSON metadata:", e);
+            return { metadata: null, error: `Failed to parse on-chain raw JSON metadata: ${e.message}` };
         }
     }
 
     // 3. Assume it's a URL (IPFS or HTTP)
+    console.log("Handling URL URI:", tokenUri);
     const url = tokenUri.startsWith('ipfs://')
         ? `https://ipfs.io/ipfs/${tokenUri.split('ipfs://')[1]}`
         : tokenUri;
     
     try {
-        const response = await fetch(url);
+        // Use fetch with appropriate headers and error handling
+        const response = await fetch(url, { 
+             headers: { 'Accept': 'application/json, text/plain, */*' } // Accept JSON or text
+        }); 
         if (!response.ok) {
-            // Specifically handle 404 Not Found for URLs
-            if (response.status === 404) {
-                return { metadata: null, error: "Metadata not found (invalid URI or not available)." };
-            }
-            
-            // Try fetching as plain text if JSON fails (for on-chain SVG or similar)
-            if (response.headers.get("content-type")?.includes("application/json")) {
-                 // If server returns non-json error for json request
-                 throw new Error(`HTTP error! status: ${response.status}`);
-            } else {
-                // Attempt to read as text for potential direct data URI (like SVG)
-                const textData = await response.text();
-                if (textData.startsWith('data:image')) { // Handle data URIs (e.g., SVG)
-                    return { metadata: { image: textData, name: `On-chain data` } };
-                }
-                // Throw error for other non-OK statuses
-                throw new Error(`HTTP error! status: ${response.status}, content-type: ${response.headers.get("content-type")}`);
-            }
+             // Handle different error statuses specifically if needed
+            throw new Error(`HTTP error fetching metadata! status: ${response.status}`);
         }
 
+        const contentType = response.headers.get("content-type");
+
         // Attempt to parse response as JSON (for standard IPFS/HTTP metadata)
-        const metadata = await response.json();
-        // Basic validation
-        if (typeof metadata === 'object' && metadata !== null) {
-            // Handle potential image IPFS URI within metadata
-            if (metadata.image && metadata.image.startsWith('ipfs://')) {
-                metadata.image = `https://ipfs.io/ipfs/${metadata.image.split('ipfs://')[1]}`;
+        if (contentType?.includes("application/json")) {
+            const metadata = await response.json();
+            if (typeof metadata === 'object' && metadata !== null) {
+                 // Handle potential image IPFS URI within metadata
+                if (metadata.image && metadata.image.startsWith('ipfs://')) {
+                    metadata.image = `https://ipfs.io/ipfs/${metadata.image.split('ipfs://')[1]}`;
+                }
+                return { metadata: metadata as NftMetadata };
             }
-            return { metadata: metadata as NftMetadata };
+             return { metadata: null, error: "Invalid JSON metadata format from URL" };
         }
-        return { metadata: null, error: "Invalid metadata format from URL" };
+        // Handle plain text or other data (like SVG)
+        else {
+             const textData = await response.text();
+            if (textData.startsWith('data:image')) { // Handle data URIs (e.g., SVG)
+                 return { metadata: { image: textData, name: `On-chain Image Data` } };
+            }
+            // If it's not JSON and not a known data URI, treat as unknown
+            return { metadata: null, error: `Unsupported content type: ${contentType}` };
+        } 
     } catch (error: any) {
         console.error("Failed to fetch or parse metadata from URL:", url, error);
         return { metadata: null, error: error.message || "Unknown metadata fetch error" };

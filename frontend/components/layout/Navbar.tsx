@@ -22,23 +22,23 @@ const Navbar = () => {
               Marketplace
             </Link>
             <Link
-              href="/my-assets"
-              className="transition-colors hover:text-foreground/80 text-foreground/60"
-            >
-              My Assets
-            </Link>
-            <Link
               href="/actions"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
             >
               Actions
             </Link>
             <Link
+              href="/my-assets"
+              className="transition-colors hover:text-foreground/80 text-foreground/60"
+            >
+              My Assets
+            </Link>
+            {/* <Link
               href="/mint"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
             >
               Mint (Admin)
-            </Link>
+            </Link> */}
             {/* Add other nav links as needed */}
           </nav>
         </div>
