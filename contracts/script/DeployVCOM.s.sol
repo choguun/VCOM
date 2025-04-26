@@ -19,8 +19,6 @@ contract DeployVCOM is Script {
     // --- Constants for Coston2 (Replace with actual addresses) ---
     address constant FLARE_FTSO_REGISTRY = 0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019;
     address constant FLARE_RNG_PROVIDER = 0x5CdF9eAF3EB8b44fB696984a1420B56A7575D250;
-    // Address for the UserActions contract (needed for CarbonCreditNFT deployment)
-    address constant USER_ACTIONS_CONTRACT = 0x6927E238673eA68b94ed5f3fb2c0e2c44679037d;
     // -------------------------------------------------------------
 
     function run() external {
@@ -35,17 +33,20 @@ contract DeployVCOM is Script {
         FTSOReader ftsoReader = new FTSOReader(FLARE_FTSO_REGISTRY);
         console.log("FTSOReader deployed at:", address(ftsoReader));
 
-        // 2. Deploy CarbonCreditNFT (Needs UserActions address)
-        CarbonCreditNFT carbonNft = new CarbonCreditNFT(deployerAddress, USER_ACTIONS_CONTRACT);
+        // 2. Deploy UserActions
+        UserActions userActions = new UserActions(deployerAddress, deployerAddress);
+        console.log("UserActions deployed at:", address(userActions));
+
+        // 3. Deploy CarbonCreditNFT (Needs UserActions address)
+        CarbonCreditNFT carbonNft = new CarbonCreditNFT(deployerAddress, address(userActions));
         console.log("CarbonCreditNFT deployed at:", address(carbonNft));
 
-        // 3. Deploy RewardNFT *before* RetirementLogic
+        // 4. Deploy RewardNFT *before* RetirementLogic
         // Compiler requires 2 address args. Assuming (initialOwner, carbonNftAddress). **VERIFY THIS!**
         RewardNFT rewardNft = new RewardNFT(deployerAddress, address(carbonNft));
         console.log("RewardNFT deployed at:", address(rewardNft));
 
-        // 4. Deploy RetirementLogic (Now has rewardNft address)
-        // ** VERIFY RetirementLogic CONSTRUCTOR ARGUMENTS! **
+        // 5. Deploy RetirementLogic (Now has rewardNft address)
         RetirementLogic retirementLogic = new RetirementLogic(
             address(carbonNft),
             address(rewardNft), // Pass actual rewardNft address
@@ -56,16 +57,6 @@ contract DeployVCOM is Script {
         // 5. Deploy Marketplace
         Marketplace marketplace = new Marketplace(address(carbonNft));
         console.log("Marketplace deployed at:", address(marketplace));
-
-        // 6. Deploy UserActions
-        // ** Constructor expects (initialOwner, attestationVerifierAddress) **
-        // ** Using deployer for both - MUST SET VERIFIER LATER! ** 
-        UserActions userActions = new UserActions(deployerAddress, deployerAddress);
-        console.log("UserActions deployed at:", address(userActions));
-        // ** IMPORTANT: Ensure the deployed address matches USER_ACTIONS_CONTRACT constant above! **
-        // ** If deploying fresh, this step might deploy to a DIFFERENT address than the constant.**
-        // ** You might need to deploy UserActions *first*, then use its address for CarbonCreditNFT.**
-        // ** OR update the constant here if UserActions is already deployed.**
 
         // --- Post-Deployment Setup ---
         // Grant necessary roles if constructors didn't handle it.
