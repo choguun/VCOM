@@ -67,7 +67,7 @@ const ERC721_ABI: Abi = [
 
 // ABI fragment for RetirementLogic
 const RETIREMENT_LOGIC_ABI: Abi = [
-    { name: 'retireNFT', inputs: [{ name: 'nftContract', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { name: 'retireNFT', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable', type: 'function' },
 ] as const;
 
 // Full ABI for RetirementLogic (including events)
@@ -347,17 +347,18 @@ export default function MyAssetsPage() {
         }
         setRetiringNftId(tokenId); // Set which NFT is currently being retired
         toast.info(`Initiating retirement for NFT #${tokenId}...`);
+        
         retireNft({ 
             address: RETIREMENT_LOGIC_ADDRESS,
-            abi: RETIREMENT_LOGIC_ABI,
+            abi: RETIREMENT_LOGIC_ABI, // Using fragment, ensure it defines retireNFT(uint256)
             functionName: 'retireNFT',
-            args: [nftContract, tokenId]
+            args: [tokenId] // Pass only tokenId in an array
         }, {
             onSuccess: (hash) => {
                  toast.success(`Retirement transaction submitted: ${hash}`);
             },
-            onError: (err) => {
-                toast.error(`Retirement failed: ${err.message}`);
+            onError: (err: any) => { // Add basic type for err
+                toast.error(`Retirement failed: ${err.shortMessage || err.message}`);
                 setRetiringNftId(null); // Reset retiring ID on error
             }
         });

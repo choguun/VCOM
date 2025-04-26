@@ -25,7 +25,7 @@ const Navbar = () => {
               href="/actions"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
             >
-              Actions
+              Attestations
             </Link>
             <Link
               href="/my-assets"
