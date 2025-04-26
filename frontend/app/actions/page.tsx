@@ -16,7 +16,7 @@ import {
     USER_ACTIONS_ABI,
     CLAIM_TRANSPORT_NFT_ABI
 } from '@/config/contracts';
-import { keccak256, toHex, Abi } from 'viem';
+import { keccak256, toHex, Abi, decodeEventLog } from 'viem';
 import Confetti from 'react-confetti';
 
 // Constants for action types
@@ -164,25 +164,59 @@ export default function ActionsPage() {
         onLogs(logs) {
             console.log('ActionRecorded event logs:', logs);
             logs.forEach(log => {
-                const args = log.args as { user: string; actionType: string; timestamp: bigint };
-                const { user, actionType: eventActionTypeB32, timestamp } = args;
-                if (user === userAddress) {
-                    // Find the matching action type string
-                    const actionType = Object.keys(actionStatuses).find(key => 
-                        (key === ACTION_TYPE_TEMP && eventActionTypeB32 === ACTION_TYPE_TEMP_B32) ||
-                        (key === ACTION_TYPE_TRANSPORT && eventActionTypeB32 === ACTION_TYPE_TRANSPORT_B32)
-                    );
+                try {
+                    // Explicitly decode the event log
+                    const decodedLog = decodeEventLog({
+                        abi: USER_ACTIONS_ABI,
+                        data: log.data,
+                        topics: log.topics,
+                        eventName: 'ActionRecorded'
+                    });
 
-                    if (actionType) {
-                        console.log(`Action ${actionType} recorded for current user at timestamp ${timestamp}. Enabling claim.`);
-                        updateActionStatus(actionType, {
-                            lastRecordedTimestamp: Number(timestamp),
-                            canClaim: true, // Enable claim button
-                            verifySuccessMessage: `Action successfully recorded on-chain at ${new Date(Number(timestamp) * 1000).toLocaleString()}! You can now claim your NFT.`
-                        });
-                        // Reset verify status
-                        updateActionStatus(actionType, { isVerifying: false, verifyError: null }); 
+                    // --- Type Guard --- 
+                    // Check if args exists, is an object, and has the required properties
+                    if ( 
+                        !decodedLog.args || 
+                        typeof decodedLog.args !== 'object' || 
+                        Array.isArray(decodedLog.args) ||
+                        !('user' in decodedLog.args) || 
+                        !('actionType' in decodedLog.args) ||
+                        !('timestamp' in decodedLog.args)
+                    ) {
+                        console.error("Decoded log args are missing, not an object, or missing properties:", decodedLog.args);
+                        return; // Skip this log entry
                     }
+                    
+                    // --- Access args directly after guard (TypeScript should infer types now) --- 
+                    const user = decodedLog.args.user as `0x${string}`; // Cast specific properties if needed
+                    const eventActionTypeB32 = decodedLog.args.actionType as `0x${string}`;
+                    const timestamp = decodedLog.args.timestamp as bigint;
+                    
+                    // Check if any cast resulted in undefined (extra safety)
+                    if (typeof user === 'undefined' || typeof eventActionTypeB32 === 'undefined' || typeof timestamp === 'undefined') {
+                         console.error("One or more decoded args properties are undefined after access:", decodedLog.args);
+                         return; // Skip this log entry
+                    }
+                    
+                    // --- Proceed with logic --- 
+                    if (user === userAddress) {
+                        const actionType = Object.keys(actionStatuses).find(key => 
+                            (key === ACTION_TYPE_TEMP && eventActionTypeB32 === ACTION_TYPE_TEMP_B32) ||
+                            (key === ACTION_TYPE_TRANSPORT && eventActionTypeB32 === ACTION_TYPE_TRANSPORT_B32)
+                        );
+
+                        if (actionType) {
+                            console.log(`Action ${actionType} recorded for current user at timestamp ${timestamp}. Enabling claim.`);
+                            updateActionStatus(actionType, {
+                                lastRecordedTimestamp: Number(timestamp),
+                                canClaim: true,
+                                verifySuccessMessage: `Action successfully recorded on-chain at ${new Date(Number(timestamp) * 1000).toLocaleString()}! You can now claim your NFT.`
+                            });
+                            updateActionStatus(actionType, { isVerifying: false, verifyError: null }); 
+                        }
+                    }
+                } catch (error) {
+                    console.error("Failed to decode ActionRecorded event log:", error, log);
                 }
             });
         },
@@ -354,7 +388,7 @@ export default function ActionsPage() {
                         onClick={() => handleClaim(actionType)} 
                         disabled={!isConnected || !status.canClaim || isProcessing}
                         className="w-full"
-                        variant="secondary"
+                        variant="outline"
                     >
                         {status.isClaiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Claim {title} NFT
