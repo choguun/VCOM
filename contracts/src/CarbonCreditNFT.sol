@@ -6,6 +6,13 @@ import {ERC721Enumerable} from "openzeppelin-contracts/contracts/token/ERC721/ex
 import {ERC721URIStorage} from "openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol"; // Or Ownable2Step
+import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol"; // For string conversions
+import {Base64} from "openzeppelin-contracts/contracts/utils/Base64.sol"; // For on-chain metadata
+
+// Interface for UserActions contract (to read lastActionTimestamp)
+interface IUserActions {
+    function lastActionTimestamp(address user, bytes32 actionType) external view returns (uint256);
+}
 
 /**
  * @title CarbonCreditNFT
@@ -17,24 +24,36 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol"; // 
  */
 contract CarbonCreditNFT is ERC721, ERC721Enumerable, ERC721URIStorage, AccessControl, Ownable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    // Add a role or address specifically for burning via retirement logic
     address public retirementContractAddress;
+    address public userActionsContractAddress; // Address of the UserActions contract
+    bytes32 public constant ACTION_TYPE_TRANSPORT_B32 = keccak256(abi.encodePacked("SUSTAINABLE_TRANSPORT_KM"));
 
     uint256 private _nextTokenId;
 
-    // Event for setting the retirement contract
+    // Mapping to track the timestamp when a user last claimed a transport NFT
+    mapping(address => uint256) public transportNFTClaimedTimestamp;
+
+    // Events
     event RetirementContractSet(address indexed retirementContract);
+    event UserActionsContractSet(address indexed userActionsContract);
+    event TransportNFTClaimed(address indexed user, uint256 indexed tokenId, uint256 actionTimestamp);
 
-    // Error for unauthorized burner
+    // Errors
     error CarbonCreditNFT__UnauthorizedBurner();
+    error CarbonCreditNFT__UserActionsNotSet();
+    error CarbonCreditNFT__ActionNotVerified();
+    error CarbonCreditNFT__AlreadyClaimed();
 
-    constructor(address initialOwner)
+    constructor(address initialOwner, address _userActionsAddress) // Add UserActions address to constructor
         ERC721("Verifiable Carbon Credit", "VCC")
-        Ownable(initialOwner) // Transfer ownership to the deployer
+        Ownable(initialOwner)
     {
-        _grantRole(DEFAULT_ADMIN_ROLE, initialOwner); // Grant admin role to deployer
-        _grantRole(MINTER_ROLE, initialOwner);        // Grant minter role initially to deployer
-        _nextTokenId = 1; // Initialize token IDs to start from 1
+        _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
+        _grantRole(MINTER_ROLE, initialOwner);
+        _nextTokenId = 1;
+        if (_userActionsAddress == address(0)) revert CarbonCreditNFT__UserActionsNotSet();
+        userActionsContractAddress = _userActionsAddress;
+        emit UserActionsContractSet(_userActionsAddress);
     }
 
     /**
@@ -70,12 +89,79 @@ contract CarbonCreditNFT is ERC721, ERC721Enumerable, ERC721URIStorage, AccessCo
     }
 
     /**
+     * @notice Allows a user to claim a Carbon Credit NFT after verifying 
+     *         a sustainable transport action via the UserActions contract.
+     * @dev Checks if the action was recorded after the last claim for this user.
+     */
+    function claimTransportNFT() public {
+        if (userActionsContractAddress == address(0)) {
+            revert CarbonCreditNFT__UserActionsNotSet();
+        }
+
+        address claimer = msg.sender;
+        
+        // 1. Check last action timestamp from UserActions contract
+        uint256 lastActionTime = IUserActions(userActionsContractAddress)
+            .lastActionTimestamp(claimer, ACTION_TYPE_TRANSPORT_B32);
+
+        if (lastActionTime == 0) {
+            revert CarbonCreditNFT__ActionNotVerified(); // Action never recorded
+        }
+
+        // 2. Check if already claimed since the last action
+        uint256 lastClaimTime = transportNFTClaimedTimestamp[claimer];
+        if (lastActionTime <= lastClaimTime) {
+            revert CarbonCreditNFT__AlreadyClaimed(); // Action timestamp must be newer than last claim
+        }
+
+        // 3. Update claimed timestamp
+        transportNFTClaimedTimestamp[claimer] = block.timestamp;
+
+        // 4. Mint the NFT
+        uint256 newTokenId = _nextTokenId++;
+        string memory newTokenURI = _buildTransportTokenURI(newTokenId, claimer, lastActionTime);
+        _safeMint(claimer, newTokenId);
+        _setTokenURI(newTokenId, newTokenURI);
+
+        emit TransportNFTClaimed(claimer, newTokenId, lastActionTime);
+    }
+
+    /**
+     * @dev Internal function to build the token URI for claimed transport NFTs.
+     *      Generates on-chain JSON metadata.
+     */
+    function _buildTransportTokenURI(uint256 tokenId, address owner, uint256 actionTimestamp) internal pure returns (string memory) {
+        string memory json = string(abi.encodePacked(
+            '{',
+                '"name": "Verified Sustainable Transport Credit #', Strings.toString(tokenId), '",',
+                '"description": "This NFT represents a verified sustainable transport action (e.g., cycling > 5km) recorded via the Flare Data Connector.",',
+                '"attributes": [',
+                    '{"trait_type": "Action Type", "value": "SUSTAINABLE_TRANSPORT_KM"},',
+                    '{"trait_type": "Owner", "value": "', Strings.toHexString(uint160(owner), 20), '"},',
+                    '{"trait_type": "Verified Timestamp", "value": ', Strings.toString(actionTimestamp), '}',
+                ']',
+            '}'
+        ));
+
+        return string(abi.encodePacked(
+            "data:application/json;base64,",
+            Base64.encode(bytes(json))
+        ));
+    }
+
+    /**
      * @notice Sets the address of the contract authorized to burn NFTs for retirement.
      * @dev Only callable by the owner.
      */
     function setRetirementContract(address _retirementContract) external onlyOwner {
         retirementContractAddress = _retirementContract;
         emit RetirementContractSet(_retirementContract);
+    }
+
+    function setUserActionsContract(address _userActionsAddress) external onlyOwner {
+        if (_userActionsAddress == address(0)) revert CarbonCreditNFT__UserActionsNotSet();
+        userActionsContractAddress = _userActionsAddress;
+        emit UserActionsContractSet(_userActionsAddress);
     }
 
     // --- OVERRIDES ---

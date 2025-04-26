@@ -29,7 +29,7 @@ contract CarbonCreditNFTTest is Test {
         nonOwner = makeAddr("nonOwner");
 
         vm.startPrank(owner);
-        carbonNft = new CarbonCreditNFT(owner);
+        carbonNft = new CarbonCreditNFT(owner, address(0));
         // Grant minter role to the 'minter' address for testing
         carbonNft.grantRole(carbonNft.MINTER_ROLE(), minter);
         // Set the authorized retirement contract address

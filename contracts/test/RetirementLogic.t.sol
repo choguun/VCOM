@@ -68,25 +68,29 @@ contract RetirementLogicTest is Test {
         // Deploy contracts
         vm.startPrank(owner);
         
-        carbonNft = new CarbonCreditNFT(owner);
-        rewardNft = new RewardNFT(owner, address(0)); 
+        // Provide dummy address for UserActions contract in CarbonCreditNFT constructor
+        carbonNft = new CarbonCreditNFT(owner, address(this)); 
+        
+        // Deploy RewardNFT first, passing owner.
+        // The retirementLogicAddress will be set *after* RetirementLogic is deployed.
+        rewardNft = new RewardNFT(owner, address(0)); // Pass address(0) initially
+        
+        // Deploy RetirementLogic (Constructor: owner, carbonNft, rewardNft)
         retirementLogic = new RetirementLogic(owner, address(carbonNft), address(rewardNft));
-        mockRng = new MockRandomNumberV2(); // Deploy the mock RNG
+        
+        // Deploy Mock RNG
+        mockRng = new MockRandomNumberV2(); 
 
-        // --- Overwrite hardcoded RNG address in RetirementLogic using vm.store ---
-        // 1. Find the storage slot for randomNumberV2Address (it's the first state variable after Ownable)
-        // Ownable uses 1 slot (owner). ReentrancyGuard uses 1 slot (_status).
-        // randomNumberV2Address is the 3rd variable = slot 2 (0-indexed)
-        bytes32 slot = bytes32(uint256(2)); 
-        // 2. Store the mockRng address in that slot for the retirementLogic instance
-        vm.store(address(retirementLogic), slot, bytes32(uint256(uint160(address(mockRng)))));
-        // Verify the overwrite worked (optional but good practice)
-        // assertEq(bytes32(uint256(uint160(retirementLogic.randomNumberV2Address()))), bytes32(uint256(uint160(address(mockRng)))));
-        // Note: Direct reading of immutable might not work easily, but vm.load can check the slot value
+        // --- Overwrite immutable RNG address in RetirementLogic using vm.store ---
+        // Find the storage slot for randomNumberV2Address (it's the first state variable after Ownable)
+        // Ownable uses 1 slot (owner).
+        // randomNumberV2Address is the 2nd variable = slot 1 (0-indexed)
+        bytes32 rngAddressSlot = bytes32(uint256(1)); 
+        vm.store(address(retirementLogic), rngAddressSlot, bytes32(uint256(uint160(address(mockRng)))));
 
-        // Set authorized addresses
+        // Set authorized addresses *after* deployment
         carbonNft.setRetirementContract(address(retirementLogic));
-        rewardNft.setRetirementLogicAddress(address(retirementLogic));
+        rewardNft.setRetirementLogicAddress(address(retirementLogic)); // Now set the correct address
         
         // Mint an NFT to the user 
         carbonNft.safeMint(user, "ipfs://some_uri"); 

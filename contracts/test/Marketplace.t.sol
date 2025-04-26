@@ -39,7 +39,7 @@ contract MarketplaceTest is Test {
 
         // Deploy NFT contract (owner deploys, grants minter role to seller)
         vm.startPrank(owner);
-        testNft = new CarbonCreditNFT(owner);
+        testNft = new CarbonCreditNFT(owner, address(this));
         testNft.grantRole(testNft.MINTER_ROLE(), seller);
         vm.stopPrank();
 
@@ -48,7 +48,6 @@ contract MarketplaceTest is Test {
         testNft.safeMint(seller, TEST_URI);
         vm.stopPrank();
         assertEq(testNft.ownerOf(NFT_ID_1), seller, "Setup Fail: Seller should own NFT");
-
 
         // Give users Ether
         vm.deal(buyer, STARTING_BALANCE);
