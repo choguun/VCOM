@@ -8,9 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { Abi } from 'viem';
-
-// Deployed NFT Contract Address
-const CARBON_CREDIT_NFT_ADDRESS = '0x656152B512511c87D8cca31E7Eae319b48d1B60e'; 
+import { CARBON_CREDIT_NFT_ADDRESS } from '@/config/contracts'; // Import address from config
 
 // --- Updated ABI for safeMint(address to, string memory tokenURI) --- 
 const MINT_NFT_ABI: Abi = [

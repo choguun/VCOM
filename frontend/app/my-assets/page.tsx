@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAccount, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContracts, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Abi } from 'viem';
@@ -18,11 +18,17 @@ import {
   DialogClose // Optional: If using a close button inside
 } from "@/components/ui/dialog";
 import ListItemDialog from "@/components/marketplace/ListItemDialog"; // Import the new dialog component
+import { decodeEventLog } from 'viem'; // Import decodeEventLog
+import { 
+    CARBON_CREDIT_NFT_ADDRESS, 
+    REWARD_NFT_ADDRESS, 
+    RETIREMENT_LOGIC_ADDRESS 
+} from '@/config/contracts'; // Import addresses from config
 
 // Deployed Contract Addresses
-const CARBON_CREDIT_NFT_ADDRESS = '0x656152B512511c87D8cca31E7Eae319b48d1B60e';
-const REWARD_NFT_ADDRESS = '0xB98f0281b9B220eA3e44c83c69672264FEbb0e17';
-const RETIREMENT_LOGIC_ADDRESS = '0xb35c508208EAf6E683d0d5B58B1aC11602B46B45';
+// const CARBON_CREDIT_NFT_ADDRESS = '0x656152B512511c87D8cca31E7Eae319b48d1B60e'; // Remove old definition
+// const REWARD_NFT_ADDRESS = '0xDDc1457b88ef7B13a764D0eaBc2A76e627EFA034'; // Remove old definition
+// const RETIREMENT_LOGIC_ADDRESS = '0xB1CE21202736905dDC7762D59B3a705c68E26Ff6'; // Remove old definition
 
 // Replace the basic ABI with the full ABI provided
 const ERC721_ABI: Abi = [
@@ -62,6 +68,29 @@ const ERC721_ABI: Abi = [
 // ABI fragment for RetirementLogic
 const RETIREMENT_LOGIC_ABI: Abi = [
     { name: 'retireNFT', inputs: [{ name: 'nftContract', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable', type: 'function' },
+] as const;
+
+// Full ABI for RetirementLogic (including events)
+const RETIREMENT_LOGIC_FULL_ABI: Abi = [
+    {"type":"constructor","inputs":[{"name":"_initialOwner","type":"address","internalType":"address"},{"name":"_carbonCreditNFT","type":"address","internalType":"address"},{"name":"_rewardNFT","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
+    {"type":"function","name":"carbonCreditNFTAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"owner","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"randomNumberV2Address","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"renounceOwnership","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"function","name":"retireNFT","inputs":[{"name":"tokenId","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"function","name":"rewardNFTAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"setCarbonCreditNFTAddress","inputs":[{"name":"_newAddress","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"function","name":"setRewardNFTAddress","inputs":[{"name":"_newAddress","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"function","name":"transferOwnership","inputs":[{"name":"newOwner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"event","name":"NFTRetired","inputs":[{"name":"user","type":"address","indexed":true,"internalType":"address"},{"name":"tokenId","type":"uint256","indexed":true,"internalType":"uint256"},{"name":"rewardTier","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"randomNumber","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"randomTimestamp","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},
+    {"type":"event","name":"OwnershipTransferred","inputs":[{"name":"previousOwner","type":"address","indexed":true,"internalType":"address"},{"name":"newOwner","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
+    {"type":"error","name":"OwnableInvalidOwner","inputs":[{"name":"owner","type":"address","internalType":"address"}]},
+    {"type":"error","name":"OwnableUnauthorizedAccount","inputs":[{"name":"account","type":"address","internalType":"address"}]},
+    {"type":"error","name":"ReentrancyGuardReentrantCall","inputs":[]},
+    {"type":"error","name":"RetirementLogic__NftBurnFailed","inputs":[]},
+    {"type":"error","name":"RetirementLogic__NotNFTOwner","inputs":[]},
+    {"type":"error","name":"RetirementLogic__RewardNFTMintFailed","inputs":[]},
+    {"type":"error","name":"RetirementLogic__RngNotSecure","inputs":[]}
 ] as const;
 
 interface NftMetadata {
@@ -315,17 +344,64 @@ export default function MyAssetsPage() {
     // --- Effect to show success/error messages for retire tx ---
     useEffect(() => {
         if (isRetireTxSuccess) {
-            toast.success(`NFT #${retiringNftId} successfully retired!`);
+            // toast.success(`NFT #${retiringNftId} successfully retired!`); // Can be commented out if event toast is preferred
             setRetiringNftId(null); // Reset retiring ID
-            // Optionally, refetch NFT data after successful retirement
-            balancesRead.refetch();
-            tokenIdsRead.refetch(); // Need to refetch subsequent steps too
-            tokenUrisRead.refetch();
+            // Data refetch is now triggered by the event listener for better timing
+            // balancesRead.refetch();
+            // tokenIdsRead.refetch(); 
+            // tokenUrisRead.refetch();
         }
         if (retireError) {
              // Error handled in onError callback of writeContract
         }
-    }, [isRetireTxSuccess, retireError, retiringNftId, balancesRead, tokenIdsRead, tokenUrisRead]);
+    }, [isRetireTxSuccess, retireError, retiringNftId /* Removed refetch dependencies */]);
+
+    // --- Watch NFTRetired Event --- 
+    useWatchContractEvent({
+        address: RETIREMENT_LOGIC_ADDRESS,
+        abi: RETIREMENT_LOGIC_FULL_ABI, // Use the full ABI with the event
+        eventName: 'NFTRetired',
+        onLogs(logs) {
+          console.log('NFTRetired event received:', logs);
+          logs.forEach((log: any) => { // Use any for now, refine type if needed
+            try {
+              const decodedLog = decodeEventLog({
+                abi: RETIREMENT_LOGIC_FULL_ABI,
+                data: log.data,
+                topics: log.topics,
+                eventName: 'NFTRetired' 
+              });
+              
+              const args = decodedLog.args as {
+                  user?: `0x${string}`;
+                  tokenId?: bigint;
+                  rewardTier?: bigint;
+              };
+
+              // Optional: Check if the event is for the current user
+              if (args.user?.toLowerCase() === address?.toLowerCase()) {
+                const message = `NFT #${args.tokenId?.toString()} retired! Reward Tier: ${args.rewardTier?.toString()}`;
+                toast.success(message);
+
+                // Refetch user's NFT data now that retirement is fully processed
+                balancesRead.refetch();
+                tokenIdsRead.refetch();
+                tokenUrisRead.refetch();
+              } else {
+                // Log retirement by other users if desired
+                console.log(`NFT #${args.tokenId?.toString()} retired by another user: ${args.user}`);
+              }
+              
+            } catch (e) {
+              console.error("Failed to decode NFTRetired event:", e, log);
+            }
+          });
+        },
+        onError(error) {
+            console.error('Error watching NFTRetired event:', error);
+            toast.error('Error listening for retirement events.');
+        }
+    });
 
     // 6. Fetch Metadata when URIs are ready
     useEffect(() => {
@@ -393,6 +469,8 @@ export default function MyAssetsPage() {
     // Helper to render NFT cards
     const renderNftCard = (nft: OwnedNft) => {
         const isCurrentlyRetiring = isRetirePending && retiringNftId === nft.id;
+        const isCurrentlyListing = !!nftToList; // Check if the list dialog is targeting *any* NFT (could be more specific)
+        
         return (
             <Card key={`${nft.contractAddress}-${nft.id}`}>
                 <CardHeader>
@@ -415,16 +493,29 @@ export default function MyAssetsPage() {
                 <CardFooter className="justify-end space-x-2">
                     {nft.contractAddress === CARBON_CREDIT_NFT_ADDRESS && (
                         <>
+                            {/* List Button */}
                             <Button
                                 size="sm"
-                                variant="default"
+                                variant="outline" // Change variant for distinction
                                 onClick={() => handleOpenListDialog(nft)}
-                                disabled={isCurrentlyRetiring || isRetireTxLoading || isRetirePending}
+                                // Disable if retiring this OR if any listing dialog is open (simplification)
+                                disabled={isCurrentlyRetiring || isRetireTxLoading || isListDialogOpen}
                             >
                                 List
                             </Button>
+                            {/* Retire Button */}
+                            <Button
+                                size="sm"
+                                variant="destructive" // Use destructive variant for retirement
+                                onClick={() => handleRetire(nft.contractAddress, nft.id)}
+                                // Disable if retiring this OR if any listing dialog is open
+                                disabled={isCurrentlyRetiring || isRetireTxLoading || isRetirePending || isListDialogOpen}
+                            >
+                                {isCurrentlyRetiring ? "Retiring..." : "Retire"}
+                            </Button>
                         </>
                     )}
+                    {/* Add logic here if Reward NFTs have actions */} 
                 </CardFooter>
             </Card>
         );

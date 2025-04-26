@@ -15,10 +15,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-
-// Deployed Addresses
-const MARKETPLACE_CONTRACT_ADDRESS = '0xd06b5a486f7239AE03a0af3e38E2041c932B0920';
-const CARBON_CREDIT_NFT_ADDRESS = '0x656152B512511c87D8cca31E7Eae319b48d1B60e'; 
+import { 
+    MARKETPLACE_ADDRESS, 
+    CARBON_CREDIT_NFT_ADDRESS 
+} from '@/config/contracts'; // Import addresses from config
 
 // --- Marketplace ABI --- 
 const MARKETPLACE_ABI: Abi = [
@@ -187,7 +187,7 @@ export default function MarketplacePage() {
     const calls = [];
     for (let i = 0; i < MAX_LISTINGS_TO_FETCH; i++) {
       calls.push({
-        address: MARKETPLACE_CONTRACT_ADDRESS as `0x${string}`,
+        address: MARKETPLACE_ADDRESS as `0x${string}`,
         abi: MARKETPLACE_ABI,
         functionName: 'listings',
         args: [BigInt(i)],
@@ -317,7 +317,7 @@ export default function MarketplacePage() {
     setBuyingListingId(listingId); // Track which item is being bought
     toast.info(`Initiating purchase for listing #${listingId}...`);
     buyItem({ 
-      address: MARKETPLACE_CONTRACT_ADDRESS,
+      address: MARKETPLACE_ADDRESS,
       abi: MARKETPLACE_ABI,
       functionName: 'buyItem',
       args: [listingId],
@@ -362,7 +362,7 @@ export default function MarketplacePage() {
     setCancellingListingId(listingId);
     toast.info(`Initiating cancellation for listing #${listingId}...`);
     cancelListing({ 
-      address: MARKETPLACE_CONTRACT_ADDRESS,
+      address: MARKETPLACE_ADDRESS,
       abi: MARKETPLACE_ABI,
       functionName: 'cancelListing',
       args: [listingId]
@@ -390,7 +390,7 @@ export default function MarketplacePage() {
 
   // --- Watch ItemSold Event ---
   useWatchContractEvent({
-      address: MARKETPLACE_CONTRACT_ADDRESS,
+      address: MARKETPLACE_ADDRESS,
       abi: MARKETPLACE_ABI,
       eventName: 'ItemSold',
       onLogs(logs) {
@@ -431,7 +431,7 @@ export default function MarketplacePage() {
 
   // +++ Watch ItemListed Event +++
   useWatchContractEvent({ 
-    address: MARKETPLACE_CONTRACT_ADDRESS,
+    address: MARKETPLACE_ADDRESS,
     abi: MARKETPLACE_ABI,
     eventName: 'ItemListed',
     onLogs(logs) {
@@ -469,7 +469,7 @@ export default function MarketplacePage() {
 
   // +++ Watch ListingCancelled Event +++
   useWatchContractEvent({ 
-    address: MARKETPLACE_CONTRACT_ADDRESS,
+    address: MARKETPLACE_ADDRESS,
     abi: MARKETPLACE_ABI,
     eventName: 'ListingCancelled',
     onLogs(logs) {
