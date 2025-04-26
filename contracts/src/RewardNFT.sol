@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ERC721} from "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
+import {ERC721Enumerable} from "openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
@@ -9,7 +10,7 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
  * @dev Simple ERC721 to represent rewards for retiring CarbonCreditNFTs.
  * Minting is restricted to the RetirementLogic contract (via Ownable or specific role).
  */
-contract RewardNFT is ERC721, Ownable {
+contract RewardNFT is ERC721, ERC721Enumerable, Ownable {
     address public retirementLogicAddress;
     uint256 private _nextTokenId;
 
@@ -23,6 +24,7 @@ contract RewardNFT is ERC721, Ownable {
         ERC721("Retirement Reward NFT", "RRNFT")
         Ownable(initialOwner)
     {
+        _nextTokenId = 1;
         retirementLogicAddress = _retirementLogicAddress;
     }
 
@@ -49,31 +51,32 @@ contract RewardNFT is ERC721, Ownable {
         retirementLogicAddress = _newAddress;
     }
 
-    // Optional: Basic tokenURI function if needed for display
-    // function tokenURI(uint256 tokenId) public view override returns (string memory) {
-    //     _requireOwned(tokenId);
-    //     // Simple on-chain URI generation (replace with IPFS if needed)
-    //     string memory baseURI = "data:application/json;base64,";
-    //     return string(
-    //         abi.encodePacked(
-    //             baseURI,
-    //             // Base64 encode basic JSON metadata
-    //             // This part requires a Base64 library or manual implementation
-    //             // For MVP, returning tier might be enough or skip URI
-    //             "{\"name\":\"Reward NFT #",
-    //             _toString(tokenId),
-    //             "\", \"description\":\"A reward for carbon retirement.\", \"attributes\": [{\"trait_type\": \"Reward Tier\", \"value\": ",
-    //             _toString(rewardTiers[tokenId]),
-    //             "}]}"
-    //         )
-    //     );
-    // }
+    // --- OVERRIDES ---
 
-    // Helper function to convert uint to string (basic implementation)
-    // function _toString(uint256 value) internal pure returns (string memory) {
-    //     // Implementation omitted for brevity - use a library or implement properly
-    //     if (value == 0) return "0";
-    //     // ... conversion logic ...
-    // }
+    // Override _update to include ERC721Enumerable's logic
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721, ERC721Enumerable)
+        returns (address)
+    {
+        return super._update(to, tokenId, auth);
+    }
 
+    // Override _increaseBalance which is now required by ERC721Enumerable
+    function _increaseBalance(address account, uint128 amount)
+        internal
+        override(ERC721, ERC721Enumerable)
+    {
+        super._increaseBalance(account, amount);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        // Add ERC721Enumerable to the override list
+        override(ERC721, ERC721Enumerable) 
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
 } 

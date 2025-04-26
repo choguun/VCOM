@@ -33,28 +33,19 @@ contract RetirementLogic is Ownable, ReentrancyGuard {
     address public carbonCreditNFTAddress; // Address of the CarbonCreditNFT contract
     address public rewardNFTAddress;       // Address of the RewardNFT contract
 
-    // Removed RANDOMNESS_FEE_NATIVE
-    // Removed rngRequestInitiator mapping
-    // Removed rngRequestTokenId mapping
-
     // Event
     event NFTRetired(address indexed user, uint256 indexed tokenId, uint256 rewardTier, uint256 randomNumber, uint256 randomTimestamp);
     // Removed RngRequested event
 
     // Errors
     error RetirementLogic__NotNFTOwner();
-    // Removed RetirementLogic__NFTTransferFailed
     error RetirementLogic__NftBurnFailed(); // More specific error
     error RetirementLogic__RngNotSecure(); // Renamed/added error
     error RetirementLogic__RewardNFTMintFailed();
-    // Removed RetirementLogic__FeePaymentFailed
-    // Removed RetirementLogic__InvalidCallbackOrigin
-    // Removed RetirementLogic__UnknownRngRequestId
 
 
     constructor(
         address _initialOwner,
-        // Removed _flareDaemon, _ftsoRegistry
         address _carbonCreditNFT,
         address _rewardNFT
     ) Ownable(_initialOwner) {
@@ -104,17 +95,7 @@ contract RetirementLogic is Ownable, ReentrancyGuard {
         // 7. Emit Event
         emit NFTRetired(msg.sender, tokenId, rewardTier, randomNumber, randomTimestamp);
     }
-
-     /**
-      * @notice Callback function is NO LONGER USED with RandomNumberV2.
-      * Kept commented out for reference, but should be removed.
-      */
-    /*
-    function receiveRandomNumber(uint256 _randomNumber, bytes32 _requestId) external {
-        // ... old logic removed ...
-    }
-    */
-
+    
     // --- Admin Functions ---
 
     function setCarbonCreditNFTAddress(address _newAddress) external onlyOwner {
@@ -124,7 +105,4 @@ contract RetirementLogic is Ownable, ReentrancyGuard {
     function setRewardNFTAddress(address _newAddress) external onlyOwner {
         rewardNFTAddress = _newAddress;
     }
-
-    // Removed withdrawEther (no fees collected)
-    // Removed receive() fallback (no direct payments needed)
 } 

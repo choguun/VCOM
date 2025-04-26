@@ -18,7 +18,6 @@ contract DeployVCOM is Script {
 
     // --- Constants for Coston2 (Replace with actual addresses) ---
     address constant FLARE_FTSO_REGISTRY = 0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019;
-    address constant FLARE_RNG_PROVIDER = 0x5CdF9eAF3EB8b44fB696984a1420B56A7575D250;
     // -------------------------------------------------------------
 
     function run() external {
@@ -43,17 +42,21 @@ contract DeployVCOM is Script {
 
         // 4. Deploy RewardNFT *before* RetirementLogic
         // Compiler requires 2 address args. Assuming (initialOwner, carbonNftAddress). **VERIFY THIS!**
-        RewardNFT rewardNft = new RewardNFT(deployerAddress, address(carbonNft));
+        RewardNFT rewardNft = new RewardNFT(deployerAddress, address(0));
         console.log("RewardNFT deployed at:", address(rewardNft));
 
         // 5. Deploy RetirementLogic (Now has rewardNft address)
         RetirementLogic retirementLogic = new RetirementLogic(
+            deployerAddress,
             address(carbonNft),
-            address(rewardNft), // Pass actual rewardNft address
-            FLARE_RNG_PROVIDER
+            address(rewardNft)
         );
         console.log("RetirementLogic deployed at:", address(retirementLogic));
 
+        // Set retirement logic address in CarbonCreditNFT
+        carbonNft.setRetirementContract(address(retirementLogic));
+        rewardNft.setRetirementLogicAddress(address(retirementLogic));
+        
         // 5. Deploy Marketplace
         Marketplace marketplace = new Marketplace(address(carbonNft));
         console.log("Marketplace deployed at:", address(marketplace));
