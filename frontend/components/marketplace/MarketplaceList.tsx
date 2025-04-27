@@ -1,173 +1,291 @@
 'use client'; // Needs to be client component for potential hooks later
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import NFTCard from '@/components/nft/NFTCard';
-import { useReadContract } from 'wagmi';
-import { parseAbiItem } from 'viem'; // For defining ABI items
+import {
+    useAccount,
+    useReadContract,
+    useReadContracts,
+    useWriteContract,
+    useWaitForTransactionReceipt
+} from 'wagmi';
+import { parseAbiItem, formatUnits, type Abi } from 'viem'; // For defining ABI items
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { flareTestnet } from 'wagmi/chains'; // Or your specific chain
 
-// --- Contract Config --- TODO: Move to a central config file later
-const MARKETPLACE_CONTRACT_ADDRESS = "0xd06b5a486f7239AE03a0af3e38E2041c932B0920"; // <-- REPLACE WITH ACTUAL DEPLOYED ADDRESS
+// --- Config Imports --- 
+import { 
+    MARKETPLACE_ADDRESS, 
+    MARKETPLACE_ABI, // Assuming full Marketplace ABI is exported
+    CARBON_CREDIT_NFT_ADDRESS, // Needed if only listing Carbon NFTs
+    ERC721_ABI // Assuming a generic ERC721 ABI is exported
+} from '@/config/contracts';
+import { fetchMetadata, type NftMetadata } from '@/lib/nftUtils'; // Import from shared utility file
 
-// Manually define ABI fragments for Marketplace contract
-const marketplaceAbi = [
-  // Function to get a listing by ID
-  parseAbiItem('function listings(uint256 listingId) view returns (address seller, address nftContract, uint256 tokenId, uint256 priceInFLR, bool active)'),
-  // Function/Variable to get the next listing ID (effectively the count)
-  parseAbiItem('function _nextListingId() view returns (uint256)'), // Assuming it's public or has a getter
-  // Event (optional, for listening to updates later)
-  // parseAbiItem('event ItemListed(uint256 indexed listingId, address indexed seller, address indexed nftContract, uint256 tokenId, uint256 price)'),
-];
-
-// Placeholder data structure for listings
-interface Listing {
-  id: string; // Corresponds to listingId
-  tokenId: number;
-  price: string; // e.g., "150 FLR"
-  seller: string;
-  nftContract: string;
-  active: boolean;
-  // Add potential metadata fetched later
-  name?: string;
-  description?: string;
-  imageUrl?: string;
+// Data structure for listings (combined on-chain and off-chain data)
+interface CombinedListing {
+    id: bigint; // listingId from contract
+    tokenId: bigint;
+    price: bigint; // priceInFLR (wei)
+    seller: `0x${string}`;
+    nftContract: `0x${string}`;
+    active: boolean;
+    tokenUri?: string; // Fetched separately
+    metadata?: NftMetadata;
+    metadataError?: string;
+    // Derived/Formatted fields
+    formattedPrice?: string; 
 }
 
-// Simulate fetching metadata (replace with actual IPFS/API call)
-const fetchNFTMetadata = async (nftContract: string, tokenId: number): Promise<Partial<Listing>> => {
-    console.log(`Simulating metadata fetch for ${nftContract} #${tokenId}`);
-    await new Promise(resolve => setTimeout(resolve, 50)); // Simulate short delay
-    // TODO: Fetch actual metadata from tokenURI (likely IPFS)
-    return {
-        name: `NFT #${tokenId}`,
-        description: `Description for NFT #${tokenId} fetched from metadata.`,
-        imageUrl: undefined // Use placeholder for now
-    }
-}
+// --- Component --- 
 
 const MarketplaceList = () => {
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+    const { address: connectedAddress } = useAccount(); // Get connected user address
+    const [listings, setListings] = useState<CombinedListing[]>([]);
+    const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
+    const [globalError, setGlobalError] = useState<string | null>(null);
+    const [buyingListingId, setBuyingListingId] = useState<bigint | null>(null);
 
-  // 1. Read the total number of listings (_nextListingId)
-  const { data: nextListingIdData, isLoading: isLoadingCount, error: countError } = useReadContract({
-    address: MARKETPLACE_CONTRACT_ADDRESS,
-    abi: marketplaceAbi,
-    functionName: '_nextListingId',
-    // chainId: coston2Chain.id // Optional: Specify chain if not default
-  });
+    // 1. Read the total number of listings (_nextListingId)
+    const { data: nextListingIdData, isLoading: isLoadingCount, error: countError } = useReadContract({
+        address: MARKETPLACE_ADDRESS,
+        abi: MARKETPLACE_ABI,
+        functionName: '_nextListingId',
+        // chainId: flareTestnet.id // Specify chain if needed
+    });
 
-  const listingCount = nextListingIdData ? Number(nextListingIdData) : 0;
+    const listingCount = useMemo(() => nextListingIdData ? Number(nextListingIdData) : 0, [nextListingIdData]);
 
-  // 2. Fetch individual listings based on count (example structure)
-  useEffect(() => {
-    if (isLoadingCount || countError || listingCount === 0) {
-        // Handle loading state or error for count, or if count is zero
-        if (!isLoadingCount) setIsLoading(false);
-        if (countError) {
-             console.error("Error fetching listing count:", countError);
-             setError("Failed to fetch listing count.");
+    // 2. Prepare calls to fetch listing details for IDs 0 to count-1
+    const listingDetailCalls = useMemo(() => {
+        if (listingCount === 0) return [];
+        const calls: any[] = [];
+        // Assuming listing IDs start from 0 or 1. Adjust loop if needed.
+        // If _nextListingId is the *next* ID, the valid IDs are 0 to count-1.
+        // If it represents the *total count*, IDs might be 1 to count.
+        // Assuming IDs are 0 to count-1 for this example.
+        for (let i = BigInt(0); i < listingCount; i++) {
+            calls.push({
+                address: MARKETPLACE_ADDRESS,
+                abi: MARKETPLACE_ABI,
+                functionName: 'listings',
+                args: [i],
+            });
         }
-         if (listingCount === 0 && !isLoadingCount && !countError) {
-             setError(null); // Clear previous errors if count is now 0
-             setListings([]); // Ensure listings are empty
-         }
-        return;
-    }
+        return calls;
+    }, [listingCount]);
 
-    const fetchAllListings = async () => {
-        console.log(`Attempting to fetch details for ${listingCount} listings...`);
-        setError(null);
-        setIsLoading(true);
-        const fetchedListings: Listing[] = [];
-        try {
-            for (let i = 0; i < listingCount; i++) {
-                // In a real app, useReadContract might not be ideal inside a loop.
-                // Consider multicall or a dedicated hook for fetching multiple items.
-                // This is a simplified example using sequential reads (inefficient).
-                
-                // TODO: Replace this sequential fetching with a more efficient method (useReadContracts, multicall)
-                // Fetch listing data (this part needs wagmi integration)
-                // const listingData = await readContract(config, {
-                //     address: MARKETPLACE_CONTRACT_ADDRESS,
-                //     abi: marketplaceAbi,
-                //     functionName: 'listings',
-                //     args: [BigInt(i)]
-                // });
-                
-                // --- Placeholder data until wagmi read inside loop is set up --- 
-                const listingData = { 
-                    seller: `0xSeller${i+1}...`, 
-                    nftContract: '0xVCC...',
-                    tokenId: BigInt(100 + i), 
-                    priceInFLR: BigInt(150 + i*10) * BigInt(10)**BigInt(16), // Price in wei (e.g., 1.5 FLR)
-                    active: true 
-                };
-                // --- End Placeholder --- 
-
-                if (listingData && listingData.active) {
-                    const metadata = await fetchNFTMetadata(listingData.nftContract, Number(listingData.tokenId));
-                    // Format price from wei to FLR string (example)
-                    const priceInFlr = parseFloat((Number(listingData.priceInFLR) / 1e18).toFixed(2));
-                    
-                    fetchedListings.push({
-                        id: i.toString(),
-                        tokenId: Number(listingData.tokenId),
-                        price: `${priceInFlr} CFLR`, // Use CFLR for Coston2
-                        seller: listingData.seller,
-                        nftContract: listingData.nftContract,
-                        active: listingData.active,
-                        ...metadata // Add fetched metadata
-                    });
-                }
+    // 3. Fetch Listing Details
+    const listingDetailsRead = useReadContracts({
+        allowFailure: true, // Allow individual listing reads to fail
+        contracts: listingDetailCalls,
+        query: {
+            enabled: listingDetailCalls.length > 0,
+            select: (data) => {
+                // Process results, associating with listingId
+                return data.map((item, index) => {
+                    const listingId = BigInt(index); // Assuming index corresponds to listingId
+                    if (item.status === 'success' && Array.isArray(item.result)) {
+                        const [seller, nftContract, tokenId, priceInFLR, active] = item.result as [`0x${string}`, `0x${string}`, bigint, bigint, boolean];
+                        // Filter out inactive/invalid listings early
+                        if (!active || nftContract === '0x0000000000000000000000000000000000000000') return null;
+                        return {
+                            id: listingId,
+                            seller,
+                            nftContract,
+                            tokenId,
+                            price: priceInFLR,
+                            active,
+                        };
+                    } else {
+                        console.warn(`Failed to fetch listing details for ID ${listingId}:`, item.error?.message);
+                        return null; // Represent failed fetch
+                    }
+                }).filter(item => item !== null) as CombinedListing[]; // Filter out nulls and assert type
             }
-            setListings(fetchedListings);
-        } catch (err) {            console.error("Error fetching individual listings:", err);
-            setError("Failed to fetch listing details.");
-        } finally {
-            setIsLoading(false);
         }
+    });
+
+    const activeListings = useMemo(() => listingDetailsRead.data ?? [], [listingDetailsRead.data]);
+
+    // 4. Prepare tokenURI calls based on fetched listings
+    const tokenUriCalls = useMemo(() => {
+        if (activeListings.length === 0) return [];
+        return activeListings.map(listing => ({
+            address: listing.nftContract,
+            abi: ERC721_ABI, // Use generic ERC721 ABI for tokenURI
+            functionName: 'tokenURI',
+            args: [listing.tokenId],
+        }));
+    }, [activeListings]);
+
+    // 5. Fetch Token URIs
+    const tokenUrisRead = useReadContracts({
+        allowFailure: true,
+        contracts: tokenUriCalls,
+        query: {
+            enabled: tokenUriCalls.length > 0,
+            select: (data) => {
+                // Combine active listings with their URIs
+                return activeListings.map((listing, index) => ({
+                    ...listing,
+                    tokenUri: data[index].status === 'success' ? data[index].result as string : undefined,
+                    metadataError: data[index].status !== 'success' ? (data[index].error?.message ?? "Failed to fetch URI") : undefined
+                }));
+            }
+        }
+    });
+
+    // 6. Fetch Metadata based on URIs
+    useEffect(() => {
+        const listingsWithUris = tokenUrisRead.data;
+        if (!listingsWithUris || listingsWithUris.length === 0) {
+            setListings([]); // Reset if URIs not loaded or empty
+            setIsFetchingMetadata(false);
+            return;
+        }
+
+        // Avoid redundant fetches if data hasn't changed
+        if (!tokenUrisRead.isFetching && !isFetchingMetadata) {
+            let isMounted = true;
+            setIsFetchingMetadata(true);
+            setGlobalError(null);
+
+            Promise.all(listingsWithUris.map(async (listingInfo) => {
+                if (!listingInfo.tokenUri) {
+                    return { ...listingInfo, metadata: null };
+                }
+                const { metadata, error } = await fetchMetadata(listingInfo.tokenUri);
+                return { ...listingInfo, metadata, metadataError: error ?? listingInfo.metadataError };
+            })).then((results) => {
+                if (isMounted) {
+                     // Format price and add to final listing object
+                    const formattedResults = results.map(res => ({
+                        ...res,
+                        formattedPrice: `${formatUnits(res.price ?? BigInt(0), 18)} CFLR`
+                    }));
+                    setListings(formattedResults);
+                    setIsFetchingMetadata(false);
+                }
+            }).catch(err => {
+                console.error("Unexpected error fetching metadata batch:", err);
+                if (isMounted) {
+                    setGlobalError("Unexpected error processing metadata.");
+                    setIsFetchingMetadata(false);
+                }
+            });
+
+            return () => { isMounted = false; };
+        }
+    }, [tokenUrisRead.data, tokenUrisRead.isFetching, isFetchingMetadata]);
+
+    // --- Buy Item Logic --- 
+     const { 
+        data: buyTxHash, 
+        isPending: isBuyPending, 
+        writeContract: buyItem 
+    } = useWriteContract();
+
+    const { isLoading: isBuyTxLoading, isSuccess: isBuyTxSuccess } = useWaitForTransactionReceipt({ 
+        hash: buyTxHash,
+        query: { enabled: !!buyTxHash } 
+    });
+
+    const handleBuyClick = (listing: CombinedListing) => {
+        if (!buyItem) {
+            toast.error("Buy function not ready.");
+            return;
+        }
+        if (!connectedAddress) {
+             toast.error("Please connect your wallet to buy.");
+            return;
+        }
+        if (listing.seller.toLowerCase() === connectedAddress.toLowerCase()) {
+            toast.warning("You cannot buy your own listing.");
+            return;
+        }
+
+        setBuyingListingId(listing.id);
+        toast.info(`Initiating purchase for NFT #${listing.tokenId}...`);
+
+        buyItem({
+            address: MARKETPLACE_ADDRESS,
+            abi: MARKETPLACE_ABI,
+            functionName: 'buyItem',
+            args: [listing.id],
+            value: listing.price, // Send the required price in wei
+        }, {
+            onSuccess: (hash) => {
+                toast.success(`Purchase transaction submitted: ${hash}`);
+                // Optionally optimistically update UI or wait for confirmation
+            },
+            onError: (err: any) => {
+                toast.error(`Purchase failed: ${err.shortMessage || err.message}`);
+                setBuyingListingId(null);
+            },
+            // onSettled: () => { // Use onSettled if you need cleanup regardless of success/error
+            //     setBuyingListingId(null);
+            // }
+        });
     };
 
-    fetchAllListings();
+    // Effect to handle buy transaction confirmation
+    useEffect(() => {
+        if (isBuyTxSuccess) {
+            toast.success(`NFT successfully purchased! Listing ID: ${buyingListingId}`);
+            setBuyingListingId(null);
+            // Trigger refetch of listings after purchase
+            listingDetailsRead.refetch(); 
+            tokenUrisRead.refetch(); // Need to refetch URIs too
+        }
+        // isBuyTxLoading handles the pending state via buyingListingId
+        // Error is handled in the onError callback of buyItem
+    }, [isBuyTxSuccess, buyingListingId, listingDetailsRead, tokenUrisRead]);
 
-  }, [nextListingIdData, isLoadingCount, countError, listingCount]); // Re-run if count changes
 
-  const handleBuyClick = (listingId: string) => {
-    console.log(`Attempting to buy listing: ${listingId}`);
-    // TODO: Implement buy logic - requires useWriteContract hook
-    alert(`Buy functionality requires useWriteContract hook (listing ${listingId}).`);
-  };
+    // --- Render Logic --- 
 
-  // Combined loading state
-  if (isLoading) {
-    return <div className="text-center p-10">Loading listings...</div>;
-  }
+    const isInitialLoading = isLoadingCount;
+    const isDetailLoading = !isInitialLoading && (listingDetailsRead.isLoading || tokenUrisRead.isLoading || isFetchingMetadata);
+    // Consolidate error checking
+    const combinedError = globalError || countError?.message || listingDetailsRead.error?.message || tokenUrisRead.error?.message;
 
-  if (error) {
-    return <div className="text-center p-10 text-red-500">Error: {error}</div>;
-  }
+    if (isInitialLoading) {
+        return <div className="text-center p-10">Loading listing count...</div>;
+    }
 
-  if (!isLoading && listings.length === 0) {
-    return <div className="text-center p-10 text-muted-foreground">No active items listed for sale.</div>;
-  }
+    if (combinedError) {
+        return <div className="text-center p-10 text-red-500">Error: {combinedError}</div>;
+    }
+    
+    if (isDetailLoading) {
+         return <div className="text-center p-10">Loading listing details...</div>;
+    }
 
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-      {listings.map((listing) => (
-        <NFTCard
-          key={listing.id}
-          tokenId={listing.tokenId}
-          name={listing.name}
-          description={listing.description}
-          imageUrl={listing.imageUrl}
-          price={listing.price}
-          actionButtonLabel="Buy Now"
-          onActionClick={() => handleBuyClick(listing.id)}
-        />
-      ))}
-    </div>
-  );
+    if (!isDetailLoading && listings.length === 0) {
+        return <div className="text-center p-10 text-muted-foreground">No active items listed for sale.</div>;
+    }
+
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {listings.map((listing) => {
+                const isBuyingThis = (isBuyPending || isBuyTxLoading) && buyingListingId === listing.id;
+                return (
+                    <NFTCard
+                        key={listing.id.toString()} // Use listing ID as key
+                        tokenId={Number(listing.tokenId)} // Convert bigint to number for display if safe
+                        name={listing.metadata?.name}
+                        description={listing.metadata?.description}
+                        imageUrl={listing.metadata?.image}
+                        price={listing.formattedPrice} // Use formatted price
+                        actionButtonLabel={isBuyingThis ? "Buying..." : "Buy Now"}
+                        onActionClick={() => handleBuyClick(listing)}
+                    />
+                );
+             })}
+        </div>
+    );
 };
 
 export default MarketplaceList; 
