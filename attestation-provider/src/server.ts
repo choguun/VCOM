@@ -559,11 +559,11 @@ app.get('/api/v1/validation-result/:validationId', (req: Request, res: Response)
         console.log(`Returning validation record for ID: ${validationId}`);
         // Restore full response, keeping uint256 as strings and conditional status
         const responseForFdc = {
-            status: (record.status === 'verified' || record.status === 'pending_fdc') ? 'verified' : record.status, 
+            status: record.status, // Return the actual stored status
             userAddress: record.userAddress,
             // Return distanceKm as a number
-            distanceKm: Math.floor(record.distanceKm ?? 0), 
-            activityType: record.activityType ?? '', 
+            distanceKm: Math.floor(record.distanceKm ?? 0),
+            activityType: record.activityType ?? '',
             // Return validationTimestamp as a number
             validationTimestamp: record.validationTimestamp, // Already a number
             // Return validationId without the '0x' prefix

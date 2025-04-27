@@ -350,6 +350,7 @@ export default function ActionsPage() {
                                 canClaim: true,
                                 verifySuccessMessage: `Action successfully recorded on-chain at ${new Date(Number(timestamp) * 1000).toLocaleString()}! You can now claim your NFT.`
                             });
+                            // stopStatusPolling(actionType); // Stop polling when event confirms success
                             updateActionStatus(actionType, { isVerifying: false, verifyError: null }); 
                         }
                     }
