@@ -2,124 +2,260 @@
 pragma solidity ^0.8.20;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol"; // Good practice
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+// Imports for FDC Verification (Adjust paths as needed)
+import {IJsonApiVerification} from "flare-foundry-periphery-package/coston2/IJsonApiVerification.sol";
+import {IEVMTransactionVerification} from "flare-foundry-periphery-package/coston2/IEVMTransactionVerification.sol";
+import {ContractRegistry} from "flare-foundry-periphery-package/coston2/ContractRegistry.sol";
+import {IJsonApi} from "flare-foundry-periphery-package/coston2/IJsonApi.sol";
+import {IEVMTransaction} from "flare-foundry-periphery-package/coston2/IEVMTransaction.sol";
+import {IFdcVerification} from "flare-foundry-periphery-package/coston2/IFdcVerification.sol";
 
 /**
  * @title UserActions
- * @dev Manages the state of user actions verified via Flare FDC.
- * Stores proof of verified environmental actions.
+ * @dev Stores verified user actions, potentially updated via FDC proofs.
  */
 contract UserActions is Ownable, ReentrancyGuard {
 
-    address public attestationVerifierAddress; // Address of the trusted AttestationVerifier contract
+    // --- Structs ---
+    struct OffChainValidationResult {
+        string status;
+        address userAddress;
+        uint256 distanceKm;
+        string activityType;
+        uint256 validationTimestamp;
+        bytes32 validationId; // Crucial: Must match hosted data & event
+    }
 
-    // Struct to store details of a recorded action (optional, could use mapping directly)
-    // struct ActionRecord {
-    //     address user;
-    //     bytes32 actionType; // Use bytes32 for gas efficiency if action types are fixed
-    //     uint256 timestamp;
-    //     bytes proofData; // Store FDC proof or relevant data hash
-    // }
-
-    // Mapping to track recorded actions to prevent replays
-    // mapping(bytes32 => bool) public isActionRecorded; // Key could be hash(user, actionType, timestamp, proofData)
-
-    // Simpler mapping: track last recorded timestamp for a user/actionType pair
+    // --- State Variables ---
     mapping(address => mapping(bytes32 => uint256)) public lastActionTimestamp;
+    address public attestationVerifierAddress; // Address authorized for direct verification (legacy or fallback)
+    address public immutable evidenceEmitterAddress; // Address of the EvidenceEmitter contract
 
-    // Event
+    // State machine for dual proof verification
+    enum ValidationStage { None, JsonApiVerified, EvmVerified, BothVerified }
+    mapping(bytes32 => ValidationStage) public validationStages; // validationId => Stage
+
+    // Minimum distance threshold for transport action (in KM, represented as integer)
+    uint256 public constant MIN_DISTANCE_THRESHOLD_KM = 5; // Example threshold
+
+    // Action Types (Consistent with Attestation Provider)
+    bytes32 public constant ACTION_TYPE_TRANSPORT_B32 = keccak256(abi.encodePacked("SUSTAINABLE_TRANSPORT_KM"));
+
+    // --- Events ---
     event ActionRecorded(
         address indexed user,
         bytes32 indexed actionType,
         uint256 timestamp,
-        bytes proofData // Include proof data hash or identifier
+        bytes proofData // Can store encoded result/event data
     );
-    event AttestationVerifierSet(address indexed newVerifier); // Event for updating the verifier
-
-    // Errors
-    error UserActions__ActionAlreadyRecorded(); // Or based on timestamp check
-    error UserActions__InvalidActionType(); // If using predefined types
-    error UserActions__TimestampTooOld(); // Prevent recording very old actions
-    error UserActions__NotAttestationVerifier(); // Error for unauthorized caller
+    event AttestationVerifierSet(address indexed newVerifier);
+    event JsonApiProofProcessed(bytes32 indexed validationId, address indexed userAddress);
+    event EvmProofProcessed(bytes32 indexed validationId, address indexed userAddress);
 
 
-    /**
-     * @param _initialOwner The initial owner of the contract.
-     * @param _attestationVerifierAddress The address of the trusted AttestationVerifier contract.
-     */
-    constructor(address _initialOwner, address _attestationVerifierAddress) Ownable(_initialOwner) {
-        require(_attestationVerifierAddress != address(0), "Invalid verifier address");
-        attestationVerifierAddress = _attestationVerifierAddress;
-        emit AttestationVerifierSet(_attestationVerifierAddress);
+    // --- Errors ---
+    error UserActions__NotAttestationVerifier();
+    error UserActions__TimestampTooOld();
+    error UserActions__ActionAlreadyRecorded();
+    error UserActions__InvalidActionType();
+    error UserActions__ProofVerificationFailed();
+    error UserActions__InvalidAttestedStatus();
+    error UserActions__DistanceTooShort();
+    error UserActions__InvalidActivityType();
+    error UserActions__ProofsIncomplete();
+    error UserActions__ProofAlreadyProcessed();
+
+    constructor(
+        address _initialOwner, 
+        address _attestationVerifierAddress, 
+        address _evidenceEmitterAddress // Add emitter address
+    ) Ownable(_initialOwner) {
+        require(_evidenceEmitterAddress != address(0), "UserActions: Invalid Emitter Address");
+        attestationVerifierAddress = _attestationVerifierAddress; // Keep for legacy/direct calls
+        evidenceEmitterAddress = _evidenceEmitterAddress; // Store emitter address
+        emit AttestationVerifierSet(_attestationVerifierAddress); // Keep existing event for clarity
     }
 
+    // --- Verification Functions ---
+
     /**
-     * @dev Modifier to restrict function calls to the designated AttestationVerifier contract.
+     * @notice Processes an FDC proof for a JsonApi attestation related to off-chain validation.
+     * @dev Verifies the proof, decodes the result, checks conditions, and updates the validation stage.
+     * @param proofBytes ABI-encoded IJsonApi.Proof struct.
      */
-    modifier onlyAttestationVerifier() {
-        if (msg.sender != attestationVerifierAddress) {
-            revert UserActions__NotAttestationVerifier();
+    function processJsonApiProof(bytes calldata proofBytes) public nonReentrant {
+        // Decode the proof structure using the main interface type
+        IJsonApi.Proof memory _proof = abi.decode(proofBytes, (IJsonApi.Proof));
+
+        // Get the central FDC verification contract instance
+        IFdcVerification verifier = ContractRegistry.getFdcVerification();
+        // Cast to the specific interface and verify
+        bool isValid = IJsonApiVerification(address(verifier)).verifyJsonApi(_proof);
+        if (!isValid) {
+            revert UserActions__ProofVerificationFailed();
         }
-        _;
+
+        // Decode the attested data from the correct field in the proof struct, using the full path
+        // Accessing _proof.data.responseBody.abi_encoded_data which holds the bytes
+        OffChainValidationResult memory result = abi.decode(_proof.data.responseBody.abi_encoded_data, (OffChainValidationResult)); 
+
+        // Perform on-chain validation checks
+        bytes32 validationId = result.validationId;
+        string memory status = result.status;
+        uint256 distanceKm = result.distanceKm;
+        string memory activityType = result.activityType;
+        address userAddress = result.userAddress;
+        uint256 validationTimestamp = result.validationTimestamp;
+
+        require(keccak256(bytes(status)) == keccak256(bytes("verified")), "UserActions__InvalidAttestedStatus");
+        require(distanceKm >= MIN_DISTANCE_THRESHOLD_KM, "UserActions__DistanceTooShort");
+        bytes32 activityHash = keccak256(bytes(activityType));
+        require(activityHash == keccak256(bytes("cycling")) || activityHash == keccak256(bytes("walking")), "UserActions__InvalidActivityType");
+
+        // Update state machine
+        ValidationStage currentStage = validationStages[validationId];
+        if (currentStage == ValidationStage.None) {
+            validationStages[validationId] = ValidationStage.JsonApiVerified;
+        } else if (currentStage == ValidationStage.EvmVerified) {
+            validationStages[validationId] = ValidationStage.BothVerified;
+            // Both proofs now verified, record the action
+            // Pass the correctly located bytes as proof details
+            _recordAction(userAddress, ACTION_TYPE_TRANSPORT_B32, validationTimestamp, _proof.data.responseBody.abi_encoded_data, validationId); 
+        } else {
+            // Already processed or both proofs received
+            revert UserActions__ProofAlreadyProcessed();
+        }
+
+        emit JsonApiProofProcessed(validationId, userAddress);
     }
 
     /**
-     * @notice Records a verified user action based on FDC proof.
-     * @dev Callable only by the trusted AttestationVerifier contract.
-     * Includes basic replay protection based on timestamp.
-     * @param user The user who performed the action.
-     * @param actionType An identifier for the type of action (e.g., keccak256("HIGH_TEMP_SEOUL")).
-     * @param timestamp The timestamp associated with the verified action (e.g., from FDC proof).
-     * @param proofData The FDC proof data or a hash of it (content validated by AttestationVerifier).
+     * @notice Processes an FDC proof for an EVMTransaction attestation related to the ValidationEvidence event.
+     * @dev Verifies the proof, finds the relevant event, decodes it, checks conditions, and updates the validation stage.
+     * @param proofBytes ABI-encoded IEVMTransaction.Proof struct.
+     */
+    function processEvmProof(bytes calldata proofBytes) public nonReentrant {
+        // Decode the proof structure using the main interface type
+        IEVMTransaction.Proof memory _proof = abi.decode(proofBytes, (IEVMTransaction.Proof));
+
+        // Get the central FDC verification contract instance
+        IFdcVerification verifier = ContractRegistry.getFdcVerification();
+        // Cast to the specific interface and verify
+        bool isValid = IEVMTransactionVerification(address(verifier)).verifyEVMTransaction(_proof);
+        if (!isValid) {
+            revert UserActions__ProofVerificationFailed();
+        }
+
+        // Find the specific ValidationEvidence event
+        bytes32 targetEventSignature = keccak256("ValidationEvidence(bytes32,address,string,uint256,string,uint256)");
+        bool eventFound = false;
+        bytes32 validationId;
+        address userAddress;
+        uint256 validationTimestamp;
+        bytes memory eventProofData; // Store encoded event data
+
+        for (uint i = 0; i < _proof.data.responseBody.events.length; ++i) {
+            // Use the type from the main interface here too
+            IEVMTransaction.Event memory ev = _proof.data.responseBody.events[i];
+
+            // Check emitter address and event signature
+            if (ev.emitterAddress == evidenceEmitterAddress && ev.topics.length > 0 && ev.topics[0] == targetEventSignature) {
+                // Declare local variables for decoded event data
+                string memory status;
+                uint256 distanceKm;
+                string memory activityType;
+                
+                // Decode event data into previously declared and function-scoped variables
+                (validationId, userAddress, status, distanceKm, activityType, validationTimestamp) =
+                    abi.decode(ev.data, (bytes32, address, string, uint256, string, uint256));
+
+                // Perform on-chain validation checks on event data
+                require(keccak256(bytes(status)) == keccak256(bytes("verified")), "UserActions__InvalidAttestedStatus");
+                require(distanceKm >= MIN_DISTANCE_THRESHOLD_KM, "UserActions__DistanceTooShort");
+                bytes32 activityHash = keccak256(bytes(activityType));
+                require(activityHash == keccak256(bytes("cycling")) || activityHash == keccak256(bytes("walking")), "UserActions__InvalidActivityType");
+
+                eventProofData = ev.data; // Store the raw event data
+                eventFound = true;
+                break; // Found the relevant event
+            }
+        }
+
+        require(eventFound, "UserActions: ValidationEvidence event not found in proof");
+
+        // Update state machine
+        ValidationStage currentStage = validationStages[validationId];
+         if (currentStage == ValidationStage.None) {
+            validationStages[validationId] = ValidationStage.EvmVerified;
+        } else if (currentStage == ValidationStage.JsonApiVerified) {
+            validationStages[validationId] = ValidationStage.BothVerified;
+            // Both proofs now verified, record the action
+            _recordAction(userAddress, ACTION_TYPE_TRANSPORT_B32, validationTimestamp, eventProofData, validationId);
+        } else {
+            // Already processed or both proofs received
+            revert UserActions__ProofAlreadyProcessed();
+        }
+
+        emit EvmProofProcessed(validationId, userAddress);
+    }
+
+    // --- Internal Action Recording --- 
+
+    function _recordAction(
+        address user,
+        bytes32 actionType,
+        uint256 timestamp,
+        bytes memory proofDetails,
+        bytes32 validationId // Pass validationId explicitly
+    ) internal {
+        require(validationStages[validationId] == ValidationStage.BothVerified, "UserActions__ProofsIncomplete");
+        require(timestamp > lastActionTimestamp[user][actionType], "UserActions__TimestampTooOld");
+
+        // Prevent processing the same validationId twice
+        // Reset stage to avoid re-entry, although require above should handle it
+        validationStages[validationId] = ValidationStage.None; // Or a new 'Completed' stage?
+
+        lastActionTimestamp[user][actionType] = timestamp;
+        emit ActionRecorded(user, actionType, timestamp, proofDetails);
+    }
+
+    // --- Legacy/Direct Verification (Keep or remove as needed) ---
+
+    /**
+     * @notice Records a verified action directly by the trusted verifier.
+     * @dev Kept for potential fallback or alternative verification methods.
      */
     function recordVerifiedAction(
         address user,
         bytes32 actionType,
         uint256 timestamp,
-        bytes calldata proofData // Use calldata for external calls
-    )
-        external
-        onlyAttestationVerifier // Replaced onlyOwner with this modifier
-        nonReentrant
-    {
-        // Basic replay/ordering protection: ensure timestamp is newer than last recorded for this user/type
-        if (timestamp <= lastActionTimestamp[user][actionType]) {
-            revert UserActions__TimestampTooOld(); // Or a more specific replay error
+        bytes calldata proofData
+    ) external nonReentrant {
+        if (msg.sender != attestationVerifierAddress) {
+            revert UserActions__NotAttestationVerifier();
         }
+        require(timestamp > lastActionTimestamp[user][actionType], "UserActions__TimestampTooOld");
 
-        // FDC Proof Verification is now assumed to be handled by the AttestationVerifier before calling this function.
-
-        // Store the latest timestamp
         lastActionTimestamp[user][actionType] = timestamp;
-
-        // Emit event
         emit ActionRecorded(user, actionType, timestamp, proofData);
-
-        // Optional: Store more detailed record if needed using a struct and mapping
-        // bytes32 recordHash = keccak256(abi.encodePacked(user, actionType, timestamp, proofData));
-        // if (isActionRecorded[recordHash]) {
-        //     revert UserActions__ActionAlreadyRecorded();
-        // }
-        // isActionRecorded[recordHash] = true;
     }
 
-    /**
-     * @notice Allows the owner to update the address of the trusted AttestationVerifier contract.
-     * @param _newVerifierAddress The new address for the AttestationVerifier.
-     */
+    // --- Setters (Owner only) ---
+
     function setAttestationVerifierAddress(address _newVerifierAddress) external onlyOwner {
-        require(_newVerifierAddress != address(0), "Invalid verifier address");
         attestationVerifierAddress = _newVerifierAddress;
         emit AttestationVerifierSet(_newVerifierAddress);
     }
 
-    // --- Potential Future Functions ---
-    // function hasPerformedAction(address user, bytes32 actionType) external view returns (bool) {
-    //     return lastActionTimestamp[user][actionType] > 0;
-    // }
-    //
-    // function getLastActionTime(address user, bytes32 actionType) external view returns (uint256) {
-    //     return lastActionTimestamp[user][actionType];
-    // }
+    // --- Getters --- 
 
+    /**
+     * @notice Checks if a specific action has been recorded for a user after a given time.
+     * @dev Used by CarbonCreditNFT to check minting eligibility.
+     */
+    function isActionVerified(address user, bytes32 actionType, uint256 requiredTimestamp) external view returns (bool) {
+        return lastActionTimestamp[user][actionType] >= requiredTimestamp;
+    }
 } 

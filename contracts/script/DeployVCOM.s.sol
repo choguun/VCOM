@@ -11,6 +11,7 @@ import {RewardNFT} from "../src/RewardNFT.sol";
 import {RetirementLogic} from "../src/RetirementLogic.sol";
 import {Marketplace} from "../src/Marketplace.sol";
 import {UserActions} from "../src/UserActions.sol";
+import {EvidenceEmitter} from "../src/EvidenceEmitter.sol";
 // Import interfaces if needed (e.g., AccessControl)
 // import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol"; // Might not be needed if RewardNFT doesn't use it
 
@@ -30,20 +31,27 @@ contract DeployVCOM is Script {
         FTSOReader ftsoReader = new FTSOReader(); 
         console.log("FTSOReader deployed at:", address(ftsoReader));
 
-        // 2. Deploy UserActions
-        UserActions userActions = new UserActions(deployerAddress, deployerAddress);
+        // 2. Deploy EvidenceEmitter (Owner = Deployer/Attestation Provider)
+        EvidenceEmitter evidenceEmitter = new EvidenceEmitter(deployerAddress);
+        console.log("EvidenceEmitter deployed at:", address(evidenceEmitter));
+
+        // 3. Deploy UserActions (Pass deployer and emitter address)
+        UserActions userActions = new UserActions(
+            deployerAddress, 
+            deployerAddress, // Assuming deployer is also initial direct verifier
+            address(evidenceEmitter) // Pass the deployed emitter address
+        );
         console.log("UserActions deployed at:", address(userActions));
 
-        // 3. Deploy CarbonCreditNFT (Needs UserActions address)
+        // 4. Deploy CarbonCreditNFT (Adjust numbering, needs UserActions address)
         CarbonCreditNFT carbonNft = new CarbonCreditNFT(deployerAddress, address(userActions));
         console.log("CarbonCreditNFT deployed at:", address(carbonNft));
 
-        // 4. Deploy RewardNFT *before* RetirementLogic
-        // Compiler requires 2 address args. Assuming (initialOwner, carbonNftAddress). **VERIFY THIS!**
-        RewardNFT rewardNft = new RewardNFT(deployerAddress, address(0));
+        // 5. Deploy RewardNFT *before* RetirementLogic (Adjust numbering)
+        RewardNFT rewardNft = new RewardNFT(deployerAddress, address(0)); 
         console.log("RewardNFT deployed at:", address(rewardNft));
 
-        // 5. Deploy RetirementLogic (Now has rewardNft address)
+        // 6. Deploy RetirementLogic (Adjust numbering, now has rewardNft address)
         RetirementLogic retirementLogic = new RetirementLogic(
             deployerAddress,
             address(carbonNft),
@@ -51,11 +59,7 @@ contract DeployVCOM is Script {
         );
         console.log("RetirementLogic deployed at:", address(retirementLogic));
 
-        // Set retirement logic address in CarbonCreditNFT
-        carbonNft.setRetirementContract(address(retirementLogic));
-        rewardNft.setRetirementLogicAddress(address(retirementLogic));
-        
-        // 5. Deploy Marketplace
+        // 7. Deploy Marketplace (Adjust numbering)
         Marketplace marketplace = new Marketplace(address(carbonNft));
         console.log("Marketplace deployed at:", address(marketplace));
 
@@ -73,12 +77,17 @@ contract DeployVCOM is Script {
         // }
         // Add similar checks/grants for other roles as needed.
 
+        // Set retirement logic address in CarbonCreditNFT & RewardNFT
+        carbonNft.setRetirementContract(address(retirementLogic));
+        rewardNft.setRetirementLogicAddress(address(retirementLogic));
+        
         vm.stopBroadcast();
 
         console.log("\n--- Deployment Summary ---");
         console.log("FTSOReader:", address(ftsoReader));
+        console.log("EvidenceEmitter:", address(evidenceEmitter));
         console.log("CarbonCreditNFT:", address(carbonNft));
-        console.log("RewardNFT:", address(rewardNft)); // Deployed before RetirementLogic
+        console.log("RewardNFT:", address(rewardNft));
         console.log("RetirementLogic:", address(retirementLogic));
         console.log("Marketplace:", address(marketplace));
         console.log("UserActions:", address(userActions));
