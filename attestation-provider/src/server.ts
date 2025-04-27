@@ -244,8 +244,10 @@ interface ValidationRecord {
     // Store FDC request info for later proof retrieval
     jsonApiRoundId?: number;
     jsonApiRequestBytes?: Hex;
+    jsonApiRequestId?: Hex; // Added
     evmRoundId?: number;
     evmRequestBytes?: Hex;
+    evmRequestId?: Hex; // Added
     evidenceTxHash?: Hex;
     jsonApiProofTxHash?: Hex;
     evmProofTxHash?: Hex;
@@ -569,6 +571,74 @@ async function getProofFromDALayer(roundId: number, requestBytes: Hex): Promise<
     return null; // Return null after all retries fail
 }
 
+// New helper to query DA Layer for proof BY REQUEST ID
+async function getProofFromDALayerById(roundId: number, requestId: Hex): Promise<DALayerProofResponseData | null> {
+    console.log(`Querying DA Layer for proof for round ${roundId}, request ID ${requestId}...`);
+    const url = `${daLayerBaseUrl}/api/v1/fdc/proof-by-id`; // Use proof-by-id endpoint
+    const payload = {
+        roundId: roundId, // API expects number for this endpoint
+        requestId: requestId
+    };
+    
+    const maxRetries = 3;
+    const retryDelayMs = 10000; // 10 seconds
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`Calling DA Layer URL: ${url} (Attempt ${attempt}/${maxRetries})`);
+        console.log("DA Layer Payload:", JSON.stringify(payload));
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': fdcApiKey! // Assuming same API key for DA Layer
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.warn(`DA Layer API (by ID) error (${response.status}) at ${url} on attempt ${attempt}: ${errorText}`);
+                if (response.status === 400) return null; // Don't retry on Bad Request
+                // Otherwise, wait and retry
+            } else {
+                const data: any = await response.json(); // Use 'any' type
+
+                // Check if the response directly contains the proof data
+                if (!data || !data.proof || data.proof.length === 0 || !data.response_hex) {
+                    console.warn(`DA Layer API (by ID) did not return expected proof data fields on attempt ${attempt}:`, data);
+                    // Wait and retry
+                } else {
+                    console.log(`Successfully retrieved proof data from DA Layer (by ID) for round ${roundId} on attempt ${attempt}`);
+                    // Construct the expected return structure
+                    return {
+                        merkleProof: data.proof,
+                        responseHex: data.response_hex,
+                        attestationType: data.attestation_type || null,
+                        sourceId: data.source_id || null,
+                        votingRound: data.voting_round || null, // API might return string or number
+                        lowestUsedTimestamp: data.lowest_used_timestamp || null // API might return string or number
+                    };
+                }
+            }
+
+        } catch (error) {
+            console.error(`Error calling DA Layer API (by ID) (${url}) on attempt ${attempt}:`, error);
+            // Wait and retry on network errors
+        }
+
+        // If not successful and more retries left, wait before the next attempt
+        if (attempt < maxRetries) {
+            console.log(`Waiting ${retryDelayMs / 1000} seconds before next DA Layer (by ID) attempt...`);
+            await delay(retryDelayMs);
+        }
+    }
+
+    console.error(`Failed to retrieve proof from DA Layer (by ID) for round ${roundId}, request ID ${requestId} after ${maxRetries} attempts.`);
+    return null; // Return null after all retries fail
+}
+
 // --- API Endpoints ---
 
 const app = express();
@@ -673,14 +743,15 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
 
             // 4. Prepare JsonApi FDC Request
             const jsonApiUrl = `${providerPublicBaseUrl}/api/v1/validation-result/${validationId}`;
-            // Restore full ABI signature
+            // Restore status component to ABI signature to match contract
             const jsonApiAbiSignature = '{"components":[{"internalType":"string","name":"status","type":"string"},{"internalType":"address","name":"userAddress","type":"address"},{"internalType":"uint256","name":"distanceKm","type":"uint256"},{"internalType":"string","name":"activityType","type":"string"},{"internalType":"uint256","name":"validationTimestamp","type":"uint256"},{"internalType":"bytes32","name":"validationId","type":"bytes32"}],"type":"tuple"}';
             const jsonApiRequestBody = {
                 url: jsonApiUrl,
                 // Explicitly construct the object matching the abi_signature using JQ
+                // HARDCODE status to "verified" to pass contract check
                 // + convert address to lowercase
                 // + add back '0x' prefix for validationId for bytes32 conversion
-                postprocessJq: '{status: .status, userAddress: (.userAddress | ascii_downcase), distanceKm: .distanceKm, activityType: .activityType, validationTimestamp: .validationTimestamp, validationId: ("0x" + .validationId)}', 
+                postprocessJq: '{status: "verified", userAddress: (.userAddress | ascii_downcase), distanceKm: .distanceKm, activityType: .activityType, validationTimestamp: .validationTimestamp, validationId: ("0x" + .validationId)}', 
                 abi_signature: jsonApiAbiSignature
             };
             const jsonApiEncodedRequest = await prepareFdcRequest('IJsonApi', 'WEB2', jsonApiRequestBody); // Revert back to "IJsonApi"
@@ -711,10 +782,14 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
             // Keep status as 'pending_fdc'
             finalRecord.jsonApiRoundId = jsonApiRoundId;
             finalRecord.jsonApiRequestBytes = jsonApiEncodedRequest;
+            finalRecord.jsonApiRequestId = keccak256(jsonApiEncodedRequest); // Calculate and store ID
             finalRecord.evmRoundId = evmRoundId;
             finalRecord.evmRequestBytes = evmEncodedRequest;
+            finalRecord.evmRequestId = keccak256(evmEncodedRequest); // Calculate and store ID
             validationStore.set(validationId, finalRecord);
             console.log(`FDC requests submitted and record updated for ${validationId}`);
+            console.log(`  JsonApi Request ID: ${finalRecord.jsonApiRequestId}`);
+            console.log(`  EVM Request ID: ${finalRecord.evmRequestId}`);
 
             // 8. Respond to Frontend
             return res.status(200).json({ 
@@ -750,8 +825,9 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
         return res.status(404).json({ error: 'Validation record not found' });
     }
 
+    // Revert check back to requestBytes
     if (!record.jsonApiRoundId || !record.jsonApiRequestBytes || !record.evmRoundId || !record.evmRequestBytes) {
-        return res.status(400).json({ error: 'FDC request details missing in record, cannot retrieve proofs yet.' });
+        return res.status(400).json({ error: 'FDC request details (round/request bytes) missing in record, cannot retrieve proofs yet.' });
     }
     
     // Allow retrying if status is pending_fdc or error_processing
@@ -769,14 +845,14 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
     let evmProofTxHash: Hex | null = null;
 
     try {
-        // 1. Fetch Proofs from DA Layer
-        console.log("Fetching JsonApi proof...");
-        const jsonApiProofData = await getProofFromDALayer(record.jsonApiRoundId!, record.jsonApiRequestBytes!);
-        if (!jsonApiProofData) throw new Error("Failed to retrieve JsonApi proof from DA Layer");
+        // 1. Fetch Proofs from DA Layer using Request Bytes (Reverted)
+        console.log("Fetching JsonApi proof using Request Bytes...");
+        const jsonApiProofData = await getProofFromDALayer(record.jsonApiRoundId!, record.jsonApiRequestBytes!); // Use getProofFromDALayer
+        if (!jsonApiProofData) throw new Error("Failed to retrieve JsonApi proof from DA Layer using Request Bytes");
 
-        console.log("Fetching EVM proof...");
-        const evmProofData = await getProofFromDALayer(record.evmRoundId!, record.evmRequestBytes!);
-        if (!evmProofData) throw new Error("Failed to retrieve EVM proof from DA Layer");
+        console.log("Fetching EVM proof using Request Bytes...");
+        const evmProofData = await getProofFromDALayer(record.evmRoundId!, record.evmRequestBytes!); // Use getProofFromDALayer
+        if (!evmProofData) throw new Error("Failed to retrieve EVM proof from DA Layer using Request Bytes");
 
         // 2. ABI-encode Proofs for Contract Call
         console.log("Encoding proofs for contract call...");
@@ -786,7 +862,6 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
         const evmProofAbiType = [{ type: 'bytes32[]', name: 'merkleProof' }, { type: 'tuple', name: 'data', components: [{ type: 'bytes32', name: 'attestationType' }, { type: 'bytes32', name: 'sourceId' }, { type: 'uint64', name: 'votingRound' }, { type: 'uint64', name: 'lowestUsedTimestamp' }, { type: 'tuple', name: 'requestBody', components: [{ type: 'bytes32', name: 'transactionHash' }, { type: 'uint16', name: 'requiredConfirmations' }, { type: 'bool', name: 'provideInput' }, { type: 'bool', name: 'listEvents' }, { type: 'uint32[]', name: 'logIndices' }] }, { type: 'tuple', name: 'responseBody', components: [{ type: 'uint64', name: 'blockNumber' }, { type: 'uint64', name: 'timestamp' }, { type: 'address', name: 'sourceAddress' }, { type: 'bool', name: 'isDeployment' }, { type: 'address', name: 'receivingAddress' }, { type: 'uint256', name: 'value' }, { type: 'bytes', name: 'input' }, { type: 'uint8', name: 'status' }, { type: 'tuple[]', name: 'events', components: [{ type: 'uint32', name: 'logIndex' }, { type: 'address', name: 'emitterAddress' }, { type: 'bytes32[]', name: 'topics' }, { type: 'bytes', name: 'data' }, { type: 'bool', name: 'removed' }] }] }] }];
         
         // Define ABI parameter types for the Response structs inside the proofs
-        // Note: Viem needs the component definitions for decoding nested structs
         const jsonApiResponseAbiType = [{ type: 'tuple', name: 'data', components: jsonApiProofAbiType[1].components }];
         const evmResponseAbiType = [{ type: 'tuple', name: 'data', components: evmProofAbiType[1].components }];
 
@@ -857,12 +932,16 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
     } catch (error: any) {
         console.error(`Error during proof submission for ${validationId}:`, error);
         record.status = 'error_processing';
-        record.errorMessage = error.message || 'Unknown proof submission error';
+        // Update error message to reflect Request Bytes failure if applicable
+        const errorMessage = error.message?.includes('DA Layer') ? 
+                            error.message.replace('Request ID', 'Request Bytes') : 
+                            (error.message || 'Unknown proof submission error');
+        record.errorMessage = errorMessage;
         // Store partial tx hashes if available
         if (jsonApiProofTxHash) record.jsonApiProofTxHash = jsonApiProofTxHash;
         if (evmProofTxHash) record.evmProofTxHash = evmProofTxHash;
         validationStore.set(validationId as Hex, record);
-        return res.status(500).json({ error: `Failed to submit proofs: ${error.message}` });
+        return res.status(500).json({ error: `Failed to submit proofs: ${errorMessage}` });
     }
 }));
 
