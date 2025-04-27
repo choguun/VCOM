@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi';
 import { flareTestnet } from 'wagmi/chains';
-import type { Log } from 'viem';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,7 @@ import {
     USER_ACTIONS_ABI,
     CLAIM_TRANSPORT_NFT_ABI
 } from '@/config/contracts';
-import { keccak256, toHex, Abi, decodeEventLog } from 'viem';
+import { keccak256, toHex, decodeEventLog } from 'viem';
 import Confetti from 'react-confetti';
 
 // Constants for action types
@@ -40,6 +39,11 @@ interface ActionStatus {
     selectedFile: File | null;
     selectedFileName: string;
     isReadingFile: boolean;
+    // --- New state for FDC flow ---
+    validationId: string | null; // Store the ID received from the provider
+    pollingIntervalId: NodeJS.Timeout | null; // To manage status polling
+    currentStatus: string | null; // Display current status from provider
+    backendStatus: string | null; // Store the raw status identifier from backend
 }
 
 export default function ActionsPage() {
@@ -53,12 +57,16 @@ export default function ActionsPage() {
         [ACTION_TYPE_TEMP]: { 
             lastRecordedTimestamp: 0, isVerifying: false, verifyError: null, verifySuccessMessage: null, 
             isClaiming: false, claimError: null, claimSuccessTx: null, canClaim: false,
-            selectedFile: null, selectedFileName: '', isReadingFile: false // Add file state
+            selectedFile: null, selectedFileName: '', isReadingFile: false, // Add file state
+            validationId: null, pollingIntervalId: null, currentStatus: null, // Add FDC state
+            backendStatus: null // Initialize backendStatus
         },
         [ACTION_TYPE_TRANSPORT]: { 
             lastRecordedTimestamp: 0, isVerifying: false, verifyError: null, verifySuccessMessage: null, 
             isClaiming: false, claimError: null, claimSuccessTx: null, canClaim: false,
-            selectedFile: null, selectedFileName: '', isReadingFile: false // Add file state
+            selectedFile: null, selectedFileName: '', isReadingFile: false, // Add file state
+            validationId: null, pollingIntervalId: null, currentStatus: null, // Add FDC state
+            backendStatus: null // Initialize backendStatus
         },
     }));
 
@@ -68,6 +76,117 @@ export default function ActionsPage() {
             [actionType]: { ...prev[actionType], ...updates }
         }));
     };
+
+    // --- Status Polling Logic ---
+
+    const stopStatusPolling = useCallback((actionType: string) => {
+        const status = actionStatuses[actionType];
+        if (status.pollingIntervalId) {
+            clearInterval(status.pollingIntervalId);
+            updateActionStatus(actionType, { pollingIntervalId: null });
+            console.log(`Stopped polling for ${actionType}`);
+        }
+    }, [actionStatuses]); // Dependency needed to access current status state
+
+    const checkStatus = useCallback(async (actionType: string, validationId: string) => {
+        console.log(`Checking status for ${actionType} (${validationId})...`);
+        try {
+            const response = await fetch(`${ATTESTATION_PROVIDER_API_URL}/api/v1/validation-result/${validationId}`);
+            if (!response.ok) {
+                // If record not found yet, keep polling silently for a bit
+                if (response.status === 404) {
+                    console.log(`Validation record ${validationId} not found yet, continuing poll.`);
+                    updateActionStatus(actionType, { currentStatus: "Provider processing request..." });
+                    return; 
+                }
+                const errorData = await response.json().catch(() => ({})); // Catch JSON parse errors
+                throw new Error(errorData.error || `Failed to fetch status: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`Received status update for ${validationId}:`, data.status);
+
+            let statusMessage = `Status: ${data.status}`;
+            if (data.errorMessage) {
+                statusMessage += ` - ${data.errorMessage}`;
+            }
+            updateActionStatus(actionType, { 
+                currentStatus: statusMessage, 
+                backendStatus: data.status // Store the raw backend status
+            });
+
+            // Handle final states
+            if (data.status === 'complete') {
+                console.log(`Verification complete for ${validationId}. Enabling claim.`);
+                updateActionStatus(actionType, {
+                    canClaim: true,
+                    verifySuccessMessage: "Verification process complete! Ready to claim.",
+                    currentStatus: "Complete! Ready to claim.",
+                    verifyError: null,
+                });
+                stopStatusPolling(actionType); // Stop polling on success
+            } else if (data.status === 'error_processing') {
+                console.error(`Processing error for ${validationId}:`, data.errorMessage);
+                updateActionStatus(actionType, {
+                    verifyError: `Processing failed: ${data.errorMessage || 'Unknown provider error'}`,
+                    currentStatus: `Error: ${data.errorMessage || 'Unknown provider error'}`,
+                    canClaim: false,
+                });
+                stopStatusPolling(actionType); // Stop polling on error
+            } else if (data.status === 'failed') { // Handle OpenAI failure reported by provider
+                 console.error(`Verification failed for ${validationId}:`, data.errorMessage);
+                 updateActionStatus(actionType, {
+                     verifyError: `Verification failed: ${data.errorMessage || 'Provider reported failure.'}`,
+                     currentStatus: `Failed: ${data.errorMessage || 'Provider reported failure.'}`,
+                     canClaim: false,
+                 });
+                stopStatusPolling(actionType); 
+            }
+            // Keep polling for 'verified' or 'pending_fdc'
+
+        } catch (error: any) {
+            console.error(`Error checking status for ${validationId}:`, error);
+            updateActionStatus(actionType, { 
+                verifyError: `Failed to check status: ${error.message}`,
+                currentStatus: `Error checking status: ${error.message}`
+            });
+            stopStatusPolling(actionType); // Stop polling on fetch error
+        }
+    }, [stopStatusPolling]); // Include stopStatusPolling
+
+    const startStatusPolling = useCallback((actionType: string, validationId: string) => {
+        // Clear any existing interval for this action type first
+        stopStatusPolling(actionType);
+
+        console.log(`Starting status polling for ${actionType} (${validationId})`);
+        // Initial check immediately
+        checkStatus(actionType, validationId);
+
+        // Then poll every 5 seconds (adjust interval as needed)
+        const intervalId = setInterval(() => {
+            // Refetch the validationId from the state inside the interval
+            // This ensures we use the latest state if handleVerify is called again quickly
+            const currentValidationId = actionStatuses[actionType]?.validationId;
+            if (currentValidationId) {
+                 checkStatus(actionType, currentValidationId);
+            } else {
+                 console.warn(`Polling interval for ${actionType} found no validationId, stopping.`);
+                 stopStatusPolling(actionType); // Should not happen ideally
+            }
+           
+        }, 5000); // Poll every 5 seconds
+
+        updateActionStatus(actionType, { pollingIntervalId: intervalId });
+    }, [checkStatus, stopStatusPolling, actionStatuses]); // actionStatuses needed for check inside interval
+
+    // --- Cleanup polling intervals on unmount or user change ---
+    useEffect(() => {
+        return () => {
+            Object.keys(actionStatuses).forEach(actionType => {
+                stopStatusPolling(actionType);
+            });
+        };
+    }, [stopStatusPolling]); // Only needs stopStatusPolling which has actionStatuses dependency internally
 
     // --- Read Last Action Timestamps --- 
     const { data: lastTempTimestampData } = useReadContract({
@@ -102,7 +221,16 @@ export default function ActionsPage() {
     const handleVerify = async (actionType: string) => {
         if (!userAddress) return;
 
-        updateActionStatus(actionType, { isVerifying: true, verifyError: null, verifySuccessMessage: null });
+        updateActionStatus(actionType, { 
+            isVerifying: true, 
+            verifyError: null, 
+            verifySuccessMessage: null, 
+            claimError: null, // Clear previous claim errors too
+            claimSuccessTx: null, // Clear previous tx
+            canClaim: false, // Reset claim status
+            validationId: null, // Reset validation ID
+            currentStatus: 'Initiating verification...' // Show initial status
+        });
 
         const status = actionStatuses[actionType];
         let requestBody: any = { userAddress, actionType };
@@ -116,7 +244,7 @@ export default function ActionsPage() {
             updateActionStatus(actionType, { isReadingFile: true });
             try {
                 const base64String = await readFileAsBase64(status.selectedFile);
-                requestBody.screenshotBase64 = base64String; // Add base64 string to request
+                requestBody.imageBase64 = base64String; // <-- Fix: Use imageBase64 instead of screenshotBase64
             } catch (error) {
                 console.error("Error reading file:", error);
                 updateActionStatus(actionType, { isVerifying: false, isReadingFile: false, verifyError: "Failed to read the selected file." });
@@ -128,7 +256,7 @@ export default function ActionsPage() {
         // --- --- 
 
         try {
-            console.log("Sending verification request:", requestBody)
+            console.log("Sending verification request to Attestation Provider...");
             const response = await fetch(`${ATTESTATION_PROVIDER_API_URL}/request-attestation`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -138,19 +266,29 @@ export default function ActionsPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || `Verification failed with status: ${response.status}`);
+                throw new Error(data.error || `Verification request failed: ${response.statusText}`);
             }
 
-            console.log("Verification response:", data);
+            console.log("Verification initiated response:", data);
+            if (!data.validationId) {
+                throw new Error("Attestation provider did not return a validation ID.");
+            }
+            
+            // Store validationId and update status
             updateActionStatus(actionType, { 
-                verifySuccessMessage: data.message || "Verification request submitted successfully. Waiting for on-chain confirmation...",
+                validationId: data.validationId,
+                currentStatus: "Verification initiated. Waiting for FDC processing...", 
+                verifySuccessMessage: null, 
                 verifyError: null 
             });
-            // Don't immediately set canClaim here, wait for the event
+            
+            // Start polling for status updates 
+            startStatusPolling(actionType, data.validationId); // <--- Call start polling
             
         } catch (error: any) {
-            console.error("Verification error:", error);
-            updateActionStatus(actionType, { verifyError: error.message || "An unknown error occurred during verification." });
+             console.error("Verification error:", error);
+             stopStatusPolling(actionType); // Stop polling if initial request fails
+             updateActionStatus(actionType, { verifyError: error.message || "An unknown error occurred during verification." });
         } finally {
             updateActionStatus(actionType, { isVerifying: false });
         }
@@ -328,11 +466,73 @@ export default function ActionsPage() {
         });
     };
 
+    // --- Handle Proof Submission --- 
+    const handleSubmitProofs = async (actionType: string) => {
+        const status = actionStatuses[actionType];
+        if (!status.validationId) {
+            console.error("Cannot submit proofs, validationId is missing.");
+            toast.error("Error", { description: "Validation ID is missing, cannot submit proofs." });
+            return;
+        }
+
+        console.log(`Submitting proofs for ${actionType}, validationId: ${status.validationId}`);
+        // Use isVerifying state to show loading on the button
+        updateActionStatus(actionType, { 
+            isVerifying: true, // Re-use isVerifying for loading state 
+            verifyError: null, 
+            verifySuccessMessage: null, 
+            currentStatus: "Submitting proofs to UserActions contract..."
+        });
+        // Stop polling while submitting proofs, it will restart if needed or stop on final state
+        stopStatusPolling(actionType);
+
+        try {
+            const response = await fetch(`${ATTESTATION_PROVIDER_API_URL}/submit-proofs/${status.validationId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // No body needed for this endpoint based on current backend structure
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                 // Handle specific non-OK statuses if needed (e.g., 501 Not Implemented)
+                if (response.status === 501) {
+                    throw new Error("Proof submission endpoint is not implemented on the provider.");
+                } 
+                throw new Error(data.error || `Proof submission failed: ${response.statusText}`);
+            }
+
+            console.log("Proof submission response:", data);
+            // Proof submission successful, update status and restart polling to confirm 'complete'
+            updateActionStatus(actionType, { 
+                isVerifying: false,
+                currentStatus: "Proofs submitted. Checking final status...",
+                // Optionally store proof tx hashes from data if needed: data.jsonApiProofTxHash, data.evmProofTxHash
+            });
+            // Restart polling to wait for the 'complete' status from the backend
+            startStatusPolling(actionType, status.validationId);
+            toast.info("Processing", { description: "Proofs submitted, waiting for final confirmation..." });
+
+        } catch (error: any) {
+            console.error("Proof submission error:", error);
+            updateActionStatus(actionType, { 
+                isVerifying: false, 
+                verifyError: error.message || "An unknown error occurred during proof submission.",
+                currentStatus: `Proof Submission Error: ${error.message}`
+             });
+            toast.error("Error", { description: `Proof submission failed: ${error.message}` });
+            // Consider if polling should restart on submission error or just stop
+        }
+    };
+
     // --- Render Helper --- 
     const renderActionCard = (actionType: string, title: string, description: string) => {
         const status = actionStatuses[actionType];
-        const isProcessing = status.isVerifying || status.isClaiming || status.isReadingFile;
-        const claimFunctionName = actionType === ACTION_TYPE_TEMP ? 'claimTemperatureNFT' : 'claimTransportNFT';
+        // Combine processing states
+        const isProcessing = status.isVerifying || status.isClaiming || status.isReadingFile || status.pollingIntervalId !== null; 
+        // Check the backendStatus directly
+        const isAwaitingProofSubmission = status.backendStatus === 'pending_fdc'; 
 
         return (
             <Card key={actionType}>
@@ -362,12 +562,21 @@ export default function ActionsPage() {
 
                     <Button 
                         onClick={() => handleVerify(actionType)} 
-                        disabled={!isConnected || isProcessing || status.canClaim}
+                        // Disable if connected but already verifying/claiming/polling/awaiting proof or can claim
+                        disabled={!isConnected || isProcessing || status.canClaim } 
                         className="w-full"
                     >
                         {(status.isVerifying || status.isReadingFile) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Verify {actionType === ACTION_TYPE_TRANSPORT ? (status.selectedFile ? 'Selected Screenshot' : 'Transport') : 'Condition'}
+                        {status.pollingIntervalId ? 'Checking Status...' : `Verify ${actionType === ACTION_TYPE_TRANSPORT ? (status.selectedFile ? 'Selected Screenshot' : 'Transport') : 'Condition'}`}
                     </Button>
+
+                    {/* Display Current Status during polling */}
+                    {status.pollingIntervalId && status.currentStatus && !status.verifyError && !status.verifySuccessMessage && (
+                         <Alert variant="default" className="flex items-center">
+                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <AlertDescription>{status.currentStatus}</AlertDescription>
+                        </Alert>
+                    )}
 
                     {status.verifyError && (
                         <Alert variant="destructive">
@@ -376,17 +585,33 @@ export default function ActionsPage() {
                             <AlertDescription>{status.verifyError}</AlertDescription>
                         </Alert>
                     )}
-                    {status.verifySuccessMessage && (
-                        <Alert variant="default">
+                    {/* Display final success message only when polling stops and canClaim is true */}
+                    {status.verifySuccessMessage && status.canClaim && (
+                         <Alert variant="default">
                             <CheckCircle className="h-4 w-4" />
                             <AlertTitle>Verification Status</AlertTitle>
                             <AlertDescription>{status.verifySuccessMessage}</AlertDescription>
                         </Alert>
                     )}
                     
+                    {/* --- Proof Submission Button (Phase 5 - Step 4) --- */}
+                    {/* Show button if status is pending_fdc (or similar intermediate state) */}
+                    {isAwaitingProofSubmission && (
+                         <Button 
+                            onClick={() => handleSubmitProofs(actionType)} // Call the new handler
+                            disabled={!isConnected || status.isVerifying || status.isClaiming} // Disable while verifying/claiming
+                            className="w-full"
+                            variant="secondary"
+                         >
+                             {status.isVerifying && status.currentStatus?.includes("Submitting proofs") && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+                            Check & Submit Proofs
+                         </Button>
+                    )}
+
                     <Button 
                         onClick={() => handleClaim(actionType)} 
-                        disabled={!isConnected || !status.canClaim || isProcessing}
+                        // Only enable claim if explicitly allowed AND not processing something else
+                        disabled={!isConnected || !status.canClaim || isProcessing } 
                         className="w-full"
                         variant="outline"
                     >
@@ -423,7 +648,7 @@ export default function ActionsPage() {
         <div className="container mx-auto p-4 md:p-6">
             {showConfetti && <Confetti recycle={false} />}
             <h1 className="text-3xl font-bold mb-6">Verify Environmental Actions</h1>
-            <p className="mb-8 text-muted-foreground">Prove your real-world sustainable actions using Flare Time Series Oracle (FTSO) and State Connector attestations to claim unique Carbon Credit NFTs.</p>
+            <p className="mb-8 text-muted-foreground">Prove your real-world sustainable actions using Flare Time Series Oracle (FTSO) and FDC attestations to claim unique Carbon Credit NFTs.</p>
 
             {!isConnected && (
                  <Alert variant="default" className="mb-6">

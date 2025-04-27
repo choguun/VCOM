@@ -1,33 +1,49 @@
 import { type Address, type Abi } from 'viem';
 
 // Ensure addresses are typed correctly for Viem
-export const FTSO_READER_ADDRESS: Address = '0x6b8292a8618ffd5Ef47308e262CA6D6C3d2c6596';
-export const CARBON_CREDIT_NFT_ADDRESS: Address = '0xA589d8A885095670327d7E9C6008b743aac32DbF';
-export const REWARD_NFT_ADDRESS: Address = '0x87F1Ea84aa0DfC794b11D8dbd4bbD72AA5f2E176';
-export const RETIREMENT_LOGIC_ADDRESS: Address = '0x190AFF729Ff429E2E1E1D3e085255030e1193309';
-export const MARKETPLACE_ADDRESS: Address = '0xA0d6ea0E925590056243B3f63df8dfFa1971e440';
-export const USER_ACTIONS_ADDRESS: Address = '0x68495cE965761bb30BA413A12E124Eb49A09b8Ac';
+export const FTSO_READER_ADDRESS: Address = '0x5cb3469F248714E05a95e9531676616BC2434773';
+export const EVIDENCE_EMITTER_ADDRESS: Address = '0xC4162e48426c8A3F1CF5D0D6C0359e44323796d2';
+export const CARBON_CREDIT_NFT_ADDRESS: Address = '0xe4060e40151E0c31934899604c09355f657d1D1D';
+export const REWARD_NFT_ADDRESS: Address = '0x3E4fCB17e700FE60950c1aa03A021169DD5f8342';
+export const RETIREMENT_LOGIC_ADDRESS: Address = '0x8a85f72fDD7845Fe0a6dDE302e6E3567DE5512f0';
+export const MARKETPLACE_ADDRESS: Address = '0x77abF7700780890A1AEf6d82582E23336b610100';
+export const USER_ACTIONS_ADDRESS: Address = '0x6665017B48Ec5C4e968B5B3D019AB87F07103Ce6';
 
 // ABIs (Add new ABI here)
 
+// TODO: Replace this with the updated ABI from contracts/out/UserActions.sol/UserActions.json after running `forge build`
 export const USER_ACTIONS_ABI: Abi = [
-    {"type":"constructor","inputs":[{"name":"_initialOwner","type":"address","internalType":"address"},{"name":"_attestationVerifierAddress","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
+    {"type":"constructor","inputs":[{"name":"_initialOwner","type":"address","internalType":"address"},{"name":"_attestationVerifierAddress","type":"address","internalType":"address"},{"name":"_evidenceEmitterAddress","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
+    {"type":"function","name":"ACTION_TYPE_TRANSPORT_B32","inputs":[],"outputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"stateMutability":"view"},
+    {"type":"function","name":"MIN_DISTANCE_THRESHOLD_KM","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
     {"type":"function","name":"attestationVerifierAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"evidenceEmitterAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"isActionVerified","inputs":[{"name":"user","type":"address","internalType":"address"},{"name":"actionType","type":"bytes32","internalType":"bytes32"},{"name":"requiredTimestamp","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},
     {"type":"function","name":"lastActionTimestamp","inputs":[{"name":"","type":"address","internalType":"address"},{"name":"","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
     {"type":"function","name":"owner","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    {"type":"function","name":"processEvmProof","inputs":[{"name":"proofBytes","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"function","name":"processJsonApiProof","inputs":[{"name":"proofBytes","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
     {"type":"function","name":"recordVerifiedAction","inputs":[{"name":"user","type":"address","internalType":"address"},{"name":"actionType","type":"bytes32","internalType":"bytes32"},{"name":"timestamp","type":"uint256","internalType":"uint256"},{"name":"proofData","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
     {"type":"function","name":"renounceOwnership","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
     {"type":"function","name":"setAttestationVerifierAddress","inputs":[{"name":"_newVerifierAddress","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
     {"type":"function","name":"transferOwnership","inputs":[{"name":"newOwner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
+    {"type":"function","name":"validationStages","inputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"uint8","internalType":"enum UserActions.ValidationStage"}],"stateMutability":"view"},
     {"type":"event","name":"ActionRecorded","inputs":[{"name":"user","type":"address","indexed":true,"internalType":"address"},{"name":"actionType","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"timestamp","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"proofData","type":"bytes","indexed":false,"internalType":"bytes"}],"anonymous":false},
     {"type":"event","name":"AttestationVerifierSet","inputs":[{"name":"newVerifier","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
+    {"type":"event","name":"EvmProofProcessed","inputs":[{"name":"validationId","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"userAddress","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
+    {"type":"event","name":"JsonApiProofProcessed","inputs":[{"name":"validationId","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"userAddress","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
     {"type":"event","name":"OwnershipTransferred","inputs":[{"name":"previousOwner","type":"address","indexed":true,"internalType":"address"},{"name":"newOwner","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
     {"type":"error","name":"OwnableInvalidOwner","inputs":[{"name":"owner","type":"address","internalType":"address"}]},
     {"type":"error","name":"OwnableUnauthorizedAccount","inputs":[{"name":"account","type":"address","internalType":"address"}]},
     {"type":"error","name":"ReentrancyGuardReentrantCall","inputs":[]},
     {"type":"error","name":"UserActions__ActionAlreadyRecorded","inputs":[]},
+    {"type":"error","name":"UserActions__DistanceTooShort","inputs":[]},
     {"type":"error","name":"UserActions__InvalidActionType","inputs":[]},
+    {"type":"error","name":"UserActions__InvalidAttestedStatus","inputs":[]},
     {"type":"error","name":"UserActions__NotAttestationVerifier","inputs":[]},
+    {"type":"error","name":"UserActions__ProofAlreadyProcessed","inputs":[]},
+    {"type":"error","name":"UserActions__ProofVerificationFailed","inputs":[]},
+    {"type":"error","name":"UserActions__ProofsIncomplete","inputs":[]},
     {"type":"error","name":"UserActions__TimestampTooOld","inputs":[]}
 ] as const;
 
