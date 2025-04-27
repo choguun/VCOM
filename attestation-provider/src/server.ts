@@ -505,39 +505,68 @@ async function getProofFromDALayer(roundId: number, requestBytes: Hex): Promise<
         requestBytes: requestBytes
     };
     
-    console.log("Calling DA Layer URL:", url);
-    console.log("DA Layer Payload:", JSON.stringify(payload));
+    const maxRetries = 3;
+    const retryDelayMs = 10000; // 10 seconds
 
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-API-KEY': fdcApiKey! // Assuming same API key for DA Layer
-            },
-            body: JSON.stringify(payload)
-        });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`Calling DA Layer URL: ${url} (Attempt ${attempt}/${maxRetries})`);
+        console.log("DA Layer Payload:", JSON.stringify(payload));
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`DA Layer API error (${response.status}) at ${url}: ${errorText}`);
-            return null;
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': fdcApiKey! // Assuming same API key for DA Layer
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.warn(`DA Layer API error (${response.status}) at ${url} on attempt ${attempt}: ${errorText}`);
+                // Don't retry on certain errors like 400 Bad Request, could indicate a permanent issue
+                if (response.status === 400) {
+                    return null;
+                }
+                // Otherwise, wait and retry for other errors (like 404 Not Found or 5xx)
+            } else {
+                const data: any = await response.json(); // Use 'any' type to handle potential direct data response
+
+                // Check if the response directly contains the proof data
+                // Use 'proof' for merkleProof array check based on logs
+                if (!data || !data.proof || data.proof.length === 0 || !data.response_hex) {
+                    console.warn(`DA Layer API did not return expected proof data fields on attempt ${attempt}:`, data);
+                    // Wait and retry if proof not ready or unexpected format
+                } else {
+                    console.log(`Successfully retrieved proof data from DA Layer for round ${roundId} on attempt ${attempt}`);
+                    // Construct the expected return structure
+                    return {
+                        merkleProof: data.proof,
+                        responseHex: data.response_hex,
+                        // Include other fields if available, otherwise use defaults/null
+                        attestationType: data.attestation_type || null,
+                        sourceId: data.source_id || null,
+                        votingRound: data.voting_round || null,
+                        lowestUsedTimestamp: data.lowest_used_timestamp || null
+                    };
+                }
+            }
+
+        } catch (error) {
+            console.error(`Error calling DA Layer API (${url}) on attempt ${attempt}:`, error);
+            // Wait and retry on network errors
         }
 
-        const data: DALayerProofResponse = await response.json();
-
-        if (data.status !== 'OK' || !data.data || !data.data.merkleProof || !data.data.responseHex) {
-            console.error("DA Layer API did not return OK status or expected data fields:", data);
-            return null;
+        // If not successful and more retries left, wait before the next attempt
+        if (attempt < maxRetries) {
+            console.log(`Waiting ${retryDelayMs / 1000} seconds before next DA Layer attempt...`);
+            await delay(retryDelayMs);
         }
-        
-        console.log(`Successfully retrieved proof data from DA Layer for round ${roundId}`);
-        return data.data;
-
-    } catch (error) {
-        console.error(`Error calling DA Layer API (${url}):`, error);
-        return null;
     }
+
+    console.error(`Failed to retrieve proof from DA Layer for round ${roundId} after ${maxRetries} attempts.`);
+    return null; // Return null after all retries fail
 }
 
 // --- API Endpoints ---
@@ -725,8 +754,15 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
         return res.status(400).json({ error: 'FDC request details missing in record, cannot retrieve proofs yet.' });
     }
     
-    if (record.status !== 'pending_fdc') {
+    // Allow retrying if status is pending_fdc or error_processing
+    if (record.status !== 'pending_fdc' && record.status !== 'error_processing') {
          return res.status(400).json({ error: `Cannot submit proofs, current status is ${record.status}` });
+    }
+
+    // Clear previous error if retrying
+    if (record.status === 'error_processing') {
+        record.errorMessage = undefined;
+        validationStore.set(validationId as Hex, record); // Save cleared error message
     }
 
     let jsonApiProofTxHash: Hex | null = null;
