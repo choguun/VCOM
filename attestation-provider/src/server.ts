@@ -381,14 +381,16 @@ async function prepareFdcRequest(attestationTypeName: string, sourceIdName: stri
     let baseUrl: string;
     let path: string;
 
-    if (attestationTypeName === 'IJsonApi') { // Revert check back to "IJsonApi"
+    if (attestationTypeName === 'IJsonApi' || attestationTypeName === 'JsonApi') { // Revert check back to "IJsonApi"
         baseUrl = 'https://jq-verifier-test.flare.rocks'; // Use JQ Verifier endpoint
         // JQ Verifier likely doesn't need /verifier prefix or source path
         path = `JsonApi/prepareRequest`; 
     } else {
         baseUrl = fdcVerifierBaseUrl!; // Use general FDC Verifier endpoint
-        const sourceBasePath = (sourceIdName === 'WEB2') ? 'web2' : sourceIdName;
-        path = `verifier/${sourceBasePath}/${attestationTypeName}/prepareRequest`;
+        const sourceBasePath = 'flr';
+
+        const typePath = attestationTypeName; // Use original case
+        path = `verifier/${sourceBasePath}/${typePath}/prepareRequest`;
     }
 
     // Construct the final URL robustly, ensuring only one slash between parts
@@ -637,8 +639,8 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
             validationStore.get(validationId)!.status = 'pending_fdc'; // Update status AFTER successful emission
 
             // Introduce a delay before preparing JsonApi request
-            console.log("Waiting 3 seconds before preparing JsonApi request...");
-            await delay(3000); 
+            console.log("Waiting 2 seconds before preparing JsonApi request...");
+            await delay(2000); 
 
             // 4. Prepare JsonApi FDC Request
             const jsonApiUrl = `${providerPublicBaseUrl}/api/v1/validation-result/${validationId}`;
@@ -658,12 +660,12 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
             // 5. Prepare EVMTransaction FDC Request
             const evmRequestBody = {
                 transactionHash: emitTxHash,
-                requiredConfirmations: 1,
+                requiredConfirmations: "1", // API expects a string
                 provideInput: false, // Don't need input data
                 listEvents: true,    // Need events
                 logIndices: []       // Get all events (up to limit)
             };
-            const evmEncodedRequest = await prepareFdcRequest('EVMTransaction', evmSourceNameCoston2, evmRequestBody); // Use evmSourceNameCoston2 variable
+            const evmEncodedRequest = await prepareFdcRequest('EVMTransaction', 'testFLR', evmRequestBody); // Use source 'testFLR' for EVMTransaction on testnet
             if (!evmEncodedRequest) throw new Error("Failed to prepare EVMTransaction FDC request");
 
             // 6. Submit Both FDC Requests On-Chain
