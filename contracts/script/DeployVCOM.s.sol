@@ -16,9 +16,7 @@ import {UserActions} from "../src/UserActions.sol";
 
 contract DeployVCOM is Script {
 
-    // --- Constants for Coston2 (Replace with actual addresses) ---
-    address constant FLARE_FTSO_REGISTRY = 0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019;
-    // -------------------------------------------------------------
+    // --- Removed FTSO System Address Constants ---
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -28,8 +26,8 @@ contract DeployVCOM is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy FTSOReader
-        FTSOReader ftsoReader = new FTSOReader(FLARE_FTSO_REGISTRY);
+        // 1. Deploy FTSOReader (constructor now takes no arguments)
+        FTSOReader ftsoReader = new FTSOReader(); 
         console.log("FTSOReader deployed at:", address(ftsoReader));
 
         // 2. Deploy UserActions
