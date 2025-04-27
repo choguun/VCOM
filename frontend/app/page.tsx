@@ -8,7 +8,7 @@ import { formatEther, parseEther, decodeEventLog } from 'viem'; // Import decode
 import type { Abi, Log } from 'viem'; 
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { useFlrUsdPrice, convertFlrToUsd } from "@/hooks/useFlareContracts"; // Import the hook and helper
+import { useFlrUsdPrice, convertFlrToUsd, type FlrUsdPriceData } from "@/hooks/useFlareContracts"; // Import the hook and helper
 import {
   Tooltip,
   TooltipContent,
@@ -168,6 +168,14 @@ export default function MarketplacePage() {
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE); // +++ Add display count state
   const { priceData, isLoadingPrice, isErrorPrice, errorPrice } = useFlrUsdPrice();
 
+  // +++ Add useEffect for handling price fetch errors +++
+  useEffect(() => {
+    if (isErrorPrice && errorPrice) {
+        console.warn(`[MarketplacePage] Failed to fetch FLR/USD price. USD values may be unavailable. Error: ${errorPrice.message}`);
+        // Prevent default React Query error logging if desired, though usually handled by framework
+    }
+  }, [isErrorPrice, errorPrice]);
+
   // --- Fetch Listings (Base data) ---
   const listingCalls = useMemo(() => {
     const calls = [];
@@ -210,7 +218,8 @@ export default function MarketplacePage() {
               });
               return activeListings; 
           },
-          enabled: !USE_MOCK_DATA
+          enabled: !USE_MOCK_DATA,
+          refetchOnWindowFocus: true
       }
   });
 
@@ -230,12 +239,14 @@ export default function MarketplacePage() {
   const { 
       data: tokenUrisData, 
       isLoading: isLoadingUris,
-      error: errorUris 
+      error: errorUris,
+      refetch: refetchTokenUris
   } = useReadContracts({
       allowFailure: true, 
       contracts: tokenUriCalls,
       query: {
           enabled: !USE_MOCK_DATA && baseListings.length > 0,
+          refetchOnWindowFocus: true,
           select: (data) => {
               // Combine base listing info with token URI or error
               return baseListings.map((item, index) => ({
@@ -246,20 +257,30 @@ export default function MarketplacePage() {
           }
       }
   });
+  console.log("[MarketplacePage] isLoadingUris:", isLoadingUris); // <-- Log isLoadingUris
 
   // --- Fetch Metadata based on Token URIs ---
   useEffect(() => {
-      if (USE_MOCK_DATA) return; // Skip metadata fetch if using mock data
+      console.log("[MarketplacePage] Metadata useEffect - Start"); // <-- Log effect start
+      if (USE_MOCK_DATA) {
+          console.log("[MarketplacePage] Metadata useEffect - Skipping (USE_MOCK_DATA)");
+          return;
+      }
       const listingsWithUris = tokenUrisData;
       if (!listingsWithUris || listingsWithUris.length === 0) {
+          console.log("[MarketplacePage] Metadata useEffect - No URIs data, resetting listings.");
           setListingsWithMetadata([]); // Reset if URIs are not loaded or empty
           setIsFetchingMetadata(false);
+          console.log("[MarketplacePage] Metadata useEffect - Set isFetchingMetadata: false (no URIs)"); // <-- Log set false
           return;
       }
 
-      if (!isLoadingUris && !isFetchingMetadata) { // Check isLoadingUris instead
+      // Avoid redundant fetches
+      if (!isLoadingUris && !isFetchingMetadata) {
+          console.log("[MarketplacePage] Metadata useEffect - Conditions met, starting fetch...");
           let isMounted = true;
           setIsFetchingMetadata(true);
+          console.log("[MarketplacePage] Metadata useEffect - Set isFetchingMetadata: true"); // <-- Log set true
           setMetadataError(null);
 
           Promise.all(listingsWithUris.map(async (listingInfo) => {
@@ -270,20 +291,28 @@ export default function MarketplacePage() {
               return { ...listingInfo, metadata, metadataError: error ?? listingInfo.metadataError };
           })).then((results) => {
               if (isMounted) {
+                  console.log("[MarketplacePage] Metadata useEffect - Fetch success");
                   setListingsWithMetadata(results as Listing[]); // results should now match Listing[]
                   setIsFetchingMetadata(false);
+                  console.log("[MarketplacePage] Metadata useEffect - Set isFetchingMetadata: false (success)"); // <-- Log set false
               }
           }).catch(err => {
-               console.error("Unexpected error fetching metadata batch:", err);
+               console.error("[MarketplacePage] Unexpected error fetching metadata batch:", err);
                if (isMounted) {
                    setMetadataError("Unexpected error processing metadata.");
                    setIsFetchingMetadata(false);
+                   console.log("[MarketplacePage] Metadata useEffect - Set isFetchingMetadata: false (error)"); // <-- Log set false
                }
           });
 
-          return () => { isMounted = false; };
+          return () => { 
+              console.log("[MarketplacePage] Metadata useEffect - Cleanup");
+              isMounted = false; 
+          };
+      } else {
+          console.log(`[MarketplacePage] Metadata useEffect - Conditions NOT met (isLoadingUris: ${isLoadingUris}, isFetchingMetadata: ${isFetchingMetadata})`);
       }
-  }, [tokenUrisData, isLoadingUris, isFetchingMetadata]);
+  }, [tokenUrisData, isLoadingUris]);
 
   // --- Buy Item Logic ---
   const { 
@@ -324,11 +353,12 @@ export default function MarketplacePage() {
           toast.success(`Successfully purchased listing #${buyingListingId}!`);
           setBuyingListingId(null); // Reset
           refetchListings(); // Refetch listings after successful purchase
+          refetchTokenUris(); // Add refetch for URIs
       }
       if (buyError) {
           // Handled in onError callback
       }
-  }, [isBuyTxSuccess, buyError, buyingListingId, refetchListings]);
+  }, [isBuyTxSuccess, buyError, buyingListingId, refetchListings, refetchTokenUris]);
 
   // --- Cancel Listing Logic ---
   const { 
@@ -368,121 +398,19 @@ export default function MarketplacePage() {
           toast.success(`Successfully cancelled listing #${cancellingListingId}!`);
           setCancellingListingId(null);
           refetchListings(); 
+          refetchTokenUris(); // Add refetch for URIs
       }
       if (cancelError) {
           // Handled in onError callback
       }
-  }, [isCancelTxSuccess, cancelError, cancellingListingId, refetchListings]);
+  }, [isCancelTxSuccess, cancelError, cancellingListingId, refetchListings, refetchTokenUris]);
 
-  // --- Watch ItemSold Event ---
-  useWatchContractEvent({
-      address: MARKETPLACE_ADDRESS,
-      abi: MARKETPLACE_ABI,
-      eventName: 'ItemSold',
-      onLogs(logs) {
-        console.log('ItemSold event received:', logs);
-        logs.forEach((log: Log) => { // Explicitly type log as Log from viem
-          try {
-            // Use decodeEventLog for safe parsing
-            const decodedLog = decodeEventLog({
-              abi: MARKETPLACE_ABI,
-              data: log.data,
-              topics: log.topics,
-              eventName: 'ItemSold' // Specify event name again for filtering/type safety
-            });
-            
-            // Access args from the decoded log
-            const args = decodedLog.args as {
-                listingId?: bigint;
-                buyer?: `0x${string}`;
-            };
-
-            const message = `Item #${args.listingId?.toString()} just sold${args.buyer ? ` to ${args.buyer}` : ''}!`;
-            toast.info(message);
-            
-            setTimeout(() => {
-                refetchListings();
-            }, 1000); 
-
-          } catch (e) {
-            console.error("Failed to decode ItemSold event:", e, log);
-          }
-        });
-      },
-      onError(error) {
-          console.error('Error watching ItemSold event:', error);
-          toast.error('Error listening for market events.');
-      }
-  });
-
-  // +++ Watch ItemListed Event +++
-  useWatchContractEvent({ 
-    address: MARKETPLACE_ADDRESS,
-    abi: MARKETPLACE_ABI,
-    eventName: 'ItemListed',
-    onLogs(logs) {
-      console.log('ItemListed event received:', logs);
-      logs.forEach((log: Log) => {
-        try {
-          const decodedLog = decodeEventLog({
-            abi: MARKETPLACE_ABI,
-            data: log.data,
-            topics: log.topics,
-            eventName: 'ItemListed'
-          });
-          // Ensure correct type assertion for ItemListed args
-          const args = decodedLog.args as { 
-              listingId?: bigint; 
-              seller?: `0x${string}`; 
-              nftContract?: `0x${string}`;
-              tokenId?: bigint;
-              priceInFLR?: bigint;
-          };
-          const message = `New listing #${args.listingId?.toString()}! (Token #${args.tokenId?.toString()} by ${args.seller?.substring(0,6)}...)`;
-          toast.info(message);
-          // Refetch after a short delay to allow indexer/node to catch up
-          setTimeout(() => { refetchListings(); }, 1500); 
-        } catch (e) {
-          console.error("Failed to decode ItemListed event:", e, log);
-        }
-      });
-    },
-    onError(error) {
-        console.error('Error watching ItemListed event:', error);
-        toast.error('Error listening for new listings.');
-    }
-  });
-
-  // +++ Watch ListingCancelled Event +++
-  useWatchContractEvent({ 
-    address: MARKETPLACE_ADDRESS,
-    abi: MARKETPLACE_ABI,
-    eventName: 'ListingCancelled',
-    onLogs(logs) {
-      console.log('ListingCancelled event received:', logs);
-      logs.forEach((log: Log) => {
-        try {
-          const decodedLog = decodeEventLog({
-            abi: MARKETPLACE_ABI,
-            data: log.data,
-            topics: log.topics,
-            eventName: 'ListingCancelled'
-          });
-          const args = decodedLog.args as { listingId?: bigint; }; // Type assertion for ListingCancelled
-          const message = `Listing #${args.listingId?.toString()} was cancelled.`;
-          toast.warning(message); // Use warning style for cancellation
-          // Refetch after a short delay
-          setTimeout(() => { refetchListings(); }, 1500); 
-        } catch (e) {
-          console.error("Failed to decode ListingCancelled event:", e, log);
-        }
-      });
-    },
-    onError(error) {
-        console.error('Error watching ListingCancelled event:', error);
-        toast.error('Error listening for cancellations.');
-    }
-  });
+  // --- Event Watchers Removed as Workaround for RPC Filter Issues ---
+  // The code previously here watched ItemSold, ItemListed, and ListingCancelled events.
+  // Due to persistent 'filter not found' errors with the RPC provider, 
+  // these have been removed. Listings will now update only after the current
+  // user successfully buys or cancels an item via the refetchListings() calls
+  // in the useEffect hooks monitoring isBuyTxSuccess and isCancelTxSuccess.
 
   // Determine which data to use
   const dataToDisplay = USE_MOCK_DATA ? MOCK_LISTINGS : listingsWithMetadata;
@@ -491,6 +419,8 @@ export default function MarketplacePage() {
   const isInitialLoading = !USE_MOCK_DATA && isLoadingListings; 
   const isDetailLoading = !USE_MOCK_DATA && !isInitialLoading && (isLoadingUris || isFetchingMetadata); 
   let combinedError: string | null = USE_MOCK_DATA ? null : (errorListings?.message || errorUris?.message || metadataError || (isErrorPrice ? errorPrice?.message || "Price Error" : null));
+
+  console.log(`[MarketplacePage] Render check - isInitialLoading: ${isInitialLoading}, isDetailLoading: ${isDetailLoading}, isLoadingUris: ${isLoadingUris}, isFetchingMetadata: ${isFetchingMetadata}`); // <-- Log final states
 
   // Handler for Load More button
   const handleLoadMore = () => {
@@ -540,7 +470,7 @@ export default function MarketplacePage() {
                 const isBuyingThis = isBuyPending && buyingListingId === item.listingId;
                 const isCancellingThis = isCancelPending && cancellingListingId === item.listingId;
                 const isOwnedByCurrentUser = !USE_MOCK_DATA && item.seller.toLowerCase() === address?.toLowerCase();
-                const usdPrice = convertFlrToUsd(item.priceInFLR, priceData);
+                const usdPrice = convertFlrToUsd(item.priceInFLR, priceData as FlrUsdPriceData | null | undefined);
                 return (
                   <Card key={item.listingId.toString()}>
                     <CardHeader>
@@ -557,9 +487,12 @@ export default function MarketplacePage() {
                       <CardTitle className="text-lg truncate">{item.metadata?.name || `Token #${item.tokenId.toString()}`}</CardTitle>
                       <CardDescription>
                         Price: {formatEther(item.priceInFLR)} C2FLR
-                        {/* Display USD price if available */}
-                        {usdPrice && <span className="text-xs text-muted-foreground ml-1">({usdPrice})</span>}
+                        {/* Display USD price more resiliently */}
                         {isLoadingPrice && <span className="text-xs text-muted-foreground ml-1">(...)</span>} 
+                        {!isLoadingPrice && !isErrorPrice && usdPrice && (
+                          <span className="text-xs text-muted-foreground ml-1">({usdPrice})</span>
+                        )}
+                        {/* Removed explicit display on error */}
                       </CardDescription> 
                     </CardHeader>
                     <CardContent>

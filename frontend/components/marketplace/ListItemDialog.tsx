@@ -8,32 +8,7 @@ import { toast } from "sonner";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther } from 'viem';
 import type { Abi } from 'viem';
-
-// --- Import relevant ABIs and Addresses ---
-
-// ABI needed for NFT approval
-const ERC721_ABI_WITH_APPROVAL: Abi = [
-    { name: 'approve', inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable', type: 'function' },
-    { name: 'getApproved', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'operator', type: 'address' }], stateMutability: 'view', type: 'function' },
-] as const;
-
-// Marketplace ABI (including listItem)
-const MARKETPLACE_ABI: Abi = [
-    {"type":"constructor","inputs":[{"name":"initialOwner","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
-    {"type":"function","name":"buyItem","inputs":[{"name":"listingId","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"payable"},
-    {"type":"function","name":"cancelListing","inputs":[{"name":"listingId","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"listItem","inputs":[{"name":"nftContract","type":"address","internalType":"address"},{"name":"tokenId","type":"uint256","internalType":"uint256"},{"name":"priceInFLR","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"listings","inputs":[{"name":"","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"seller","type":"address","internalType":"address"},{"name":"nftContract","type":"address","internalType":"address"},{"name":"tokenId","type":"uint256","internalType":"uint256"},{"name":"priceInFLR","type":"uint256","internalType":"uint256"},{"name":"active","type":"bool","internalType":"bool"}],"stateMutability":"view"},
-    {"type":"function","name":"owner","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"renounceOwnership","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"transferOwnership","inputs":[{"name":"newOwner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"event","name":"ItemListed","inputs":[{"name":"listingId","type":"uint256","indexed":true,"internalType":"uint256"},{"name":"seller","type":"address","indexed":true,"internalType":"address"},{"name":"nftContract","type":"address","indexed":true,"internalType":"address"},{"name":"tokenId","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"priceInFLR","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},
-    {"type":"event","name":"ItemSold","inputs":[{"name":"listingId","type":"uint256","indexed":true,"internalType":"uint256"},{"name":"buyer","type":"address","indexed":true,"internalType":"address"},{"name":"seller","type":"address","indexed":false,"internalType":"address"},{"name":"nftContract","type":"address","indexed":false,"internalType":"address"},{"name":"tokenId","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"priceInFLR","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},
-    {"type":"event","name":"ListingCancelled","inputs":[{"name":"listingId","type":"uint256","indexed":true,"internalType":"uint256"}],"anonymous":false},
-    {"type":"event","name":"OwnershipTransferred","inputs":[{"name":"previousOwner","type":"address","indexed":true,"internalType":"address"},{"name":"newOwner","type":"address","indexed":true,"internalType":"address"}]}
-];
-
-const MARKETPLACE_CONTRACT_ADDRESS = '0xd06b5a486f7239AE03a0af3e38E2041c932B0920';
+import { MARKETPLACE_ABI, MARKETPLACE_ADDRESS, ERC721_ABI } from '@/config/contracts';
 
 // Passed from MyAssetsPage
 interface NftData {
@@ -61,7 +36,7 @@ export default function ListItemDialog({ nft, onListingComplete }: ListItemDialo
     // Check approval status
     const { data: approvedAddress, refetch: refetchApproval } = useReadContract({
         address: nft.contractAddress,
-        abi: ERC721_ABI_WITH_APPROVAL,
+        abi: ERC721_ABI,
         functionName: 'getApproved',
         args: [nft.id],
         query: { enabled: !!nft },
@@ -78,7 +53,7 @@ export default function ListItemDialog({ nft, onListingComplete }: ListItemDialo
     // Wait for listing tx
     const { isLoading: isListingTxLoading, isSuccess: isListingTxSuccess } = useWaitForTransactionReceipt({ hash: listingTxHash });
 
-    const needsApproval = approvedAddress?.toLowerCase() !== MARKETPLACE_CONTRACT_ADDRESS.toLowerCase();
+    const needsApproval = approvedAddress !== MARKETPLACE_ADDRESS;
     const isLoading = isApprovePending || isApprovalTxLoading || isListPending || isListingTxLoading;
 
     // --- Handlers ---
@@ -88,9 +63,9 @@ export default function ListItemDialog({ nft, onListingComplete }: ListItemDialo
         toast.info(`Requesting approval for Marketplace to manage NFT #${nft.id}...`);
         approveNft({ 
             address: nft.contractAddress,
-            abi: ERC721_ABI_WITH_APPROVAL,
+            abi: ERC721_ABI,
             functionName: 'approve',
-            args: [MARKETPLACE_CONTRACT_ADDRESS, nft.id]
+            args: [MARKETPLACE_ADDRESS, nft.id]
         }, {
             onSuccess: (hash) => {
                 setApprovalTxHash(hash);
@@ -113,7 +88,7 @@ export default function ListItemDialog({ nft, onListingComplete }: ListItemDialo
         toast.info(`Listing NFT #${nft.id} for ${price} C2FLR...`);
 
         listItem({ 
-            address: MARKETPLACE_CONTRACT_ADDRESS,
+            address: MARKETPLACE_ADDRESS,
             abi: MARKETPLACE_ABI, 
             functionName: 'listItem',
             args: [nft.contractAddress, nft.id, priceWei]

@@ -1,12 +1,12 @@
 import { type Address, type Abi } from 'viem';
 
 // Ensure addresses are typed correctly for Viem
-export const FTSO_READER_ADDRESS: Address = '0xc86420c51A934C90c387167bE963a41e248fC845';
-export const CARBON_CREDIT_NFT_ADDRESS: Address = '0xd6b141B028afC2918BA55349E3c6Bf5535E9b702';
-export const REWARD_NFT_ADDRESS: Address = '0xADa7171F2e9622DE5E8d56f00Cc322a2CC8b79F3';
-export const RETIREMENT_LOGIC_ADDRESS: Address = '0xF6A5d8B09486129BfcbEE5281E50e78C43Dc1519';
-export const MARKETPLACE_ADDRESS: Address = '0x08651112EA2a6f80Fb8C2Ab56d96098De61Ad6cF';
-export const USER_ACTIONS_ADDRESS: Address = '0x5fEFDa92BA0536a3690a8479A4A5AAFc26F4ECf0';
+export const FTSO_READER_ADDRESS: Address = '0x6b8292a8618ffd5Ef47308e262CA6D6C3d2c6596';
+export const CARBON_CREDIT_NFT_ADDRESS: Address = '0xA589d8A885095670327d7E9C6008b743aac32DbF';
+export const REWARD_NFT_ADDRESS: Address = '0x87F1Ea84aa0DfC794b11D8dbd4bbD72AA5f2E176';
+export const RETIREMENT_LOGIC_ADDRESS: Address = '0x190AFF729Ff429E2E1E1D3e085255030e1193309';
+export const MARKETPLACE_ADDRESS: Address = '0xA0d6ea0E925590056243B3f63df8dfFa1971e440';
+export const USER_ACTIONS_ADDRESS: Address = '0x68495cE965761bb30BA413A12E124Eb49A09b8Ac';
 
 // ABIs (Add new ABI here)
 
@@ -117,4 +117,16 @@ export const MARKETPLACE_ABI: Abi = [
     {"type":"event","name":"ItemSold","inputs":[{"name":"listingId","type":"uint256","indexed":true,"internalType":"uint256"},{"name":"buyer","type":"address","indexed":true,"internalType":"address"},{"name":"seller","type":"address","indexed":false,"internalType":"address"},{"name":"nftContract","type":"address","indexed":false,"internalType":"address"},{"name":"tokenId","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"priceInFLR","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},
     {"type":"event","name":"ListingCancelled","inputs":[{"name":"listingId","type":"uint256","indexed":true,"internalType":"uint256"}],"anonymous":false},
     {"type":"event","name":"OwnershipTransferred","inputs":[{"name":"previousOwner","type":"address","indexed":true,"internalType":"address"},{"name":"newOwner","type":"address","indexed":true,"internalType":"address"}]}
+] as const;
+
+export const FTSO_READER_ABI: Abi = [
+    {"type":"constructor","inputs":[{"name":"_ftsoRegistry","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
+    {"type":"function","name":"FLR_SYMBOL","inputs":[],"outputs":[{"name":"","type":"string","internalType":"string"}],"stateMutability":"view"},
+    {"type":"function","name":"USD_SYMBOL","inputs":[],"outputs":[{"name":"","type":"string","internalType":"string"}],"stateMutability":"view"},
+    {"type":"function","name":"convertFlrToUsd","inputs":[{"name":"flrAmount","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"usdValue","type":"uint256","internalType":"uint256"},{"name":"usdDecimals","type":"uint8","internalType":"uint8"}],"stateMutability":"view"},
+    {"type":"function","name":"ftsoRegistryAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
+    // Corrected getFlrUsdPrice output order
+    {"type":"function","name":"getFlrUsdPrice","inputs":[],"outputs":[{"name":"price","type":"uint256","internalType":"uint256"},{"name":"decimals","type":"uint8","internalType":"uint8"},{"name":"timestamp","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
+    {"type":"error","name":"FTSOReader__FtsoNotFound","inputs":[]},
+    {"type":"error","name":"FTSOReader__PriceQueryFailed","inputs":[]}
 ] as const;

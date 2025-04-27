@@ -1,24 +1,9 @@
 import { useReadContract } from 'wagmi';
-import type { Abi } from 'viem';
 import { formatUnits } from 'viem';
+import { FTSO_READER_ADDRESS, FTSO_READER_ABI } from '@/config/contracts';
 
-// Deployed FTSOReader Address 
-const FTSO_READER_ADDRESS = '0xe2e63Cfd26459C8B1ca11271eE6AB7Cf03eC4271';
-
-// Updated FTSOReader ABI (Full ABI provided by user)
-const FTSO_READER_ABI: Abi = [
-    {"type":"constructor","inputs":[{"name":"_ftsoRegistry","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
-    {"type":"function","name":"FLR_SYMBOL","inputs":[],"outputs":[{"name":"","type":"string","internalType":"string"}],"stateMutability":"view"},
-    {"type":"function","name":"USD_SYMBOL","inputs":[],"outputs":[{"name":"","type":"string","internalType":"string"}],"stateMutability":"view"},
-    {"type":"function","name":"convertFlrToUsd","inputs":[{"name":"flrAmount","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"usdValue","type":"uint256","internalType":"uint256"},{"name":"usdDecimals","type":"uint8","internalType":"uint8"}],"stateMutability":"view"},
-    {"type":"function","name":"ftsoRegistryAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    // Corrected getFlrUsdPrice output order
-    {"type":"function","name":"getFlrUsdPrice","inputs":[],"outputs":[{"name":"price","type":"uint256","internalType":"uint256"},{"name":"decimals","type":"uint8","internalType":"uint8"},{"name":"timestamp","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
-    {"type":"error","name":"FTSOReader__FtsoNotFound","inputs":[]},
-    {"type":"error","name":"FTSOReader__PriceQueryFailed","inputs":[]}
-];
-
-interface FlrUsdPriceData {
+// Export the interface so it can be imported elsewhere
+export interface FlrUsdPriceData {
     price: bigint; 
     // Ensure correct order matching the ABI outputs
     decimals: number; 
@@ -39,13 +24,24 @@ export function useFlrUsdPrice() {
             refetchInterval: 60000,
             select: (rawData): FlrUsdPriceData | null => {
                 if (!rawData) return null;
-                // Ensure rawData destructuring matches the corrected ABI output order
-                const [price, decimals, timestamp] = rawData as readonly [bigint, number, bigint];
-                const formattedPrice = formatUnits(price, decimals); 
+                // Destructure according to the new return type: (uint256 value, int8 decimals, uint64 timestamp)
+                const [price, decimalsInt8, timestamp] = rawData as readonly [bigint, number, bigint]; 
+                
+                // Convert int8 decimals to number
+                const decimals = Number(decimalsInt8);
+                
+                // Basic validation
+                if (price === BigInt(0) || decimals === 0) {
+                    console.warn("[useFlrUsdPrice] Received zero price or decimals from contract.");
+                    return null; // Indicate data is not valid/available
+                }
+                
+                const formattedPrice = formatUnits(price, decimals);
+                 
                 return {
                     price,
-                    decimals, // Correct order
-                    timestamp, // Correct order
+                    decimals, // Use the converted number
+                    timestamp, 
                     formattedPrice
                 };
             }

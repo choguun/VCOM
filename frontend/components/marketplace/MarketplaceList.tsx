@@ -9,16 +9,13 @@ import {
     useWriteContract,
     useWaitForTransactionReceipt
 } from 'wagmi';
-import { parseAbiItem, formatUnits, type Abi } from 'viem'; // For defining ABI items
+import { formatUnits } from 'viem'; // For defining ABI items
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
-import { flareTestnet } from 'wagmi/chains'; // Or your specific chain
 
 // --- Config Imports --- 
 import { 
     MARKETPLACE_ADDRESS, 
     MARKETPLACE_ABI, // Assuming full Marketplace ABI is exported
-    CARBON_CREDIT_NFT_ADDRESS, // Needed if only listing Carbon NFTs
     ERC721_ABI // Assuming a generic ERC721 ABI is exported
 } from '@/config/contracts';
 import { fetchMetadata, type NftMetadata } from '@/lib/nftUtils'; // Import from shared utility file
@@ -32,7 +29,7 @@ interface CombinedListing {
     nftContract: `0x${string}`;
     active: boolean;
     tokenUri?: string; // Fetched separately
-    metadata?: NftMetadata;
+    metadata?: NftMetadata | null; // Allow metadata to be optional or null
     metadataError?: string;
     // Derived/Formatted fields
     formattedPrice?: string; 
@@ -153,19 +150,42 @@ const MarketplaceList = () => {
             setGlobalError(null);
 
             Promise.all(listingsWithUris.map(async (listingInfo) => {
-                if (!listingInfo.tokenUri) {
-                    return { ...listingInfo, metadata: null };
+                const { tokenUri } = listingInfo;
+                if (!tokenUri) {
+                    console.warn(`Token URI missing for tokenId: ${listingInfo.tokenId}`);
+                    return {
+                        ...listingInfo,
+                        metadata: undefined, // Explicitly undefined
+                        metadataError: "Token URI is missing",
+                    };
                 }
-                const { metadata, error } = await fetchMetadata(listingInfo.tokenUri);
-                return { ...listingInfo, metadata, metadataError: error ?? listingInfo.metadataError };
+                try {
+                    const fetchResult = await fetchMetadata(tokenUri);
+                    if (fetchResult.error) {
+                         console.error(`Failed to fetch metadata for ${tokenUri}:`, fetchResult.error);
+                        return { 
+                            ...listingInfo, 
+                            metadata: undefined, // Explicitly undefined
+                            metadataError: fetchResult.error 
+                        };
+                    }
+                    // Success case: extract metadata
+                    return { 
+                        ...listingInfo, 
+                        metadata: fetchResult.metadata, // Correctly assign the metadata object
+                        metadataError: undefined // Clear any previous URI error
+                    }; 
+                } catch (metaError: any) { // Catch unexpected errors during fetchMetadata call itself
+                    console.error(`Unexpected error fetching metadata for ${tokenUri}:`, metaError);
+                    return {
+                        ...listingInfo,
+                        metadata: undefined, // Explicitly undefined
+                        metadataError: metaError.message || "Unexpected fetch error",
+                    };
+                }
             })).then((results) => {
                 if (isMounted) {
-                     // Format price and add to final listing object
-                    const formattedResults = results.map(res => ({
-                        ...res,
-                        formattedPrice: `${formatUnits(res.price ?? BigInt(0), 18)} CFLR`
-                    }));
-                    setListings(formattedResults);
+                    setListings(results);
                     setIsFetchingMetadata(false);
                 }
             }).catch(err => {
@@ -273,12 +293,12 @@ const MarketplaceList = () => {
                 const isBuyingThis = (isBuyPending || isBuyTxLoading) && buyingListingId === listing.id;
                 return (
                     <NFTCard
-                        key={listing.id.toString()} // Use listing ID as key
-                        tokenId={Number(listing.tokenId)} // Convert bigint to number for display if safe
+                        key={listing.id.toString()}
+                        tokenId={Number(listing.tokenId)}
                         name={listing.metadata?.name}
                         description={listing.metadata?.description}
                         imageUrl={listing.metadata?.image}
-                        price={listing.formattedPrice} // Use formatted price
+                        price={listing.formattedPrice}
                         actionButtonLabel={isBuyingThis ? "Buying..." : "Buy Now"}
                         onActionClick={() => handleBuyClick(listing)}
                     />
