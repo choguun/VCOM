@@ -25,6 +25,7 @@ VCOM is a proof-of-concept decentralized application demonstrating a marketplace
     *   [Attestation Provider](#attestation-provider)
     *   [Frontend](#frontend)
 *   [Deployment](#deployment)
+*   [Images of Demo](#demo)
 *   [Flare Development Experience Notes](#flare-development-experience-notes)
 
 ## Problem & Solution
@@ -365,6 +366,36 @@ Run each component in separate terminals from the **project root directory**.
 2.  **Update `.env` Files:** Fill in the deployed contract addresses in `attestation-provider/.env` and `frontend/.env.local`.
 3.  **Deploy Attestation Provider:** Deploy the `attestation-provider` service to a cloud platform (e.g., Google Cloud Run, AWS Lambda, Heroku, Render). Ensure the environment variables are set correctly in the deployment environment. Update `PROVIDER_PUBLIC_BASE_URL` in its `.env` and `NEXT_PUBLIC_ATTESTATION_PROVIDER_URL` in `frontend/.env.local` to the deployed URL.
 4.  **Deploy Frontend:** Deploy the `frontend` Next.js application to a platform like Vercel or Netlify. Ensure the environment variables (contract addresses, provider URL) are configured in the deployment settings.
+
+## Images of Demo
+
+![alt text](ss1.png)
+- verify sustain transportation with FDC(OpenAI Vision API + EVM(Flare))
+
+![alt text](ss2.png)
+- submit OpenAPI response to JSON API of FDC attestation
+
+![alt text](ss3.png)
+- attestation flow of JSON API and EVM
+
+![alt text](ss4.png)
+- query DA Layer from Frontend and submit proof
+
+![alt text](ss5.png)
+- My Assets page contain Carbon Credit NFT and Reward NFT
+
+![alt text](ss6.png)
+- List Carbon Credit NFT in Marketplace
+
+![alt text](ss7.png)
+- Marketplace show Carbon Credit NFT price in FLR and USD value
+
+processJsonApiProof transaction \
+https://coston2-explorer.flare.network/tx/0xa83ce8f314e7d165ada33d7886969f9dea4bd0fabb08e5d88162bc82fb6765b3
+
+claimTransportNFT transaction \
+https://coston2-explorer.flare.network/tx/0xea162661009ed4f84d4f9b81986d1d7abea719c747a965138b81e58cb00d24e6
+
 
 ## Flare Development Experience Notes
 
