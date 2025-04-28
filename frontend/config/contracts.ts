@@ -1,53 +1,41 @@
 import { type Address, type Abi } from 'viem';
 
-// Ensure addresses are typed correctly for Viem
-export const FTSO_READER_ADDRESS: Address = '0x5cb3469F248714E05a95e9531676616BC2434773';
-export const EVIDENCE_EMITTER_ADDRESS: Address = '0xC4162e48426c8A3F1CF5D0D6C0359e44323796d2';
-export const CARBON_CREDIT_NFT_ADDRESS: Address = '0xe4060e40151E0c31934899604c09355f657d1D1D';
-export const REWARD_NFT_ADDRESS: Address = '0x3E4fCB17e700FE60950c1aa03A021169DD5f8342';
-export const RETIREMENT_LOGIC_ADDRESS: Address = '0x8a85f72fDD7845Fe0a6dDE302e6E3567DE5512f0';
-export const MARKETPLACE_ADDRESS: Address = '0x77abF7700780890A1AEf6d82582E23336b610100';
-export const USER_ACTIONS_ADDRESS: Address = '0x6665017B48Ec5C4e968B5B3D019AB87F07103Ce6';
+export const FTSO_READER_ADDRESS: Address = '0x21a4a466613349e189bB72D866C516E41c9BC334';
+export const EVIDENCE_EMITTER_ADDRESS: Address = '0x490b8F0AcD7B15485E8568CFbd1507863f07F4bD';
+export const CARBON_CREDIT_NFT_ADDRESS: Address = '0x699e55d28653E5100060b0c4831002572Fd1DFF4';
+export const REWARD_NFT_ADDRESS: Address = '0x7Bd5C5bF52ef42cB21a1943d86Aa5E1051e56350';
+export const RETIREMENT_LOGIC_ADDRESS: Address = '0xF53f3F574f4Fc3890bAc003D431cDb97EF4250E6';
+export const MARKETPLACE_ADDRESS: Address = '0xdbe60CD197E7845fb42dD3d819B0e4BCF6fa9391';
+export const USER_ACTIONS_ADDRESS: Address = '0x34d54A537409eD1de328022eFBa61A9a50778665';
 
-// ABIs (Add new ABI here)
-
-// TODO: Replace this with the updated ABI from contracts/out/UserActions.sol/UserActions.json after running `forge build`
 export const USER_ACTIONS_ABI: Abi = [
-    {"type":"constructor","inputs":[{"name":"_initialOwner","type":"address","internalType":"address"},{"name":"_attestationVerifierAddress","type":"address","internalType":"address"},{"name":"_evidenceEmitterAddress","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
-    {"type":"function","name":"ACTION_TYPE_TRANSPORT_B32","inputs":[],"outputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"stateMutability":"view"},
-    {"type":"function","name":"MIN_DISTANCE_THRESHOLD_KM","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
-    {"type":"function","name":"attestationVerifierAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"evidenceEmitterAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"isActionVerified","inputs":[{"name":"user","type":"address","internalType":"address"},{"name":"actionType","type":"bytes32","internalType":"bytes32"},{"name":"requiredTimestamp","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},
-    {"type":"function","name":"lastActionTimestamp","inputs":[{"name":"","type":"address","internalType":"address"},{"name":"","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
-    {"type":"function","name":"owner","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"processEvmProof","inputs":[{"name":"proofBytes","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"processJsonApiProof","inputs":[{"name":"proofBytes","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"recordVerifiedAction","inputs":[{"name":"user","type":"address","internalType":"address"},{"name":"actionType","type":"bytes32","internalType":"bytes32"},{"name":"timestamp","type":"uint256","internalType":"uint256"},{"name":"proofData","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"renounceOwnership","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"setAttestationVerifierAddress","inputs":[{"name":"_newVerifierAddress","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"transferOwnership","inputs":[{"name":"newOwner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"validationStages","inputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"uint8","internalType":"enum UserActions.ValidationStage"}],"stateMutability":"view"},
-    {"type":"event","name":"ActionRecorded","inputs":[{"name":"user","type":"address","indexed":true,"internalType":"address"},{"name":"actionType","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"timestamp","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"proofData","type":"bytes","indexed":false,"internalType":"bytes"}],"anonymous":false},
-    {"type":"event","name":"AttestationVerifierSet","inputs":[{"name":"newVerifier","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"event","name":"EvmProofProcessed","inputs":[{"name":"validationId","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"userAddress","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"event","name":"JsonApiProofProcessed","inputs":[{"name":"validationId","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"userAddress","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"event","name":"OwnershipTransferred","inputs":[{"name":"previousOwner","type":"address","indexed":true,"internalType":"address"},{"name":"newOwner","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"error","name":"OwnableInvalidOwner","inputs":[{"name":"owner","type":"address","internalType":"address"}]},
-    {"type":"error","name":"OwnableUnauthorizedAccount","inputs":[{"name":"account","type":"address","internalType":"address"}]},
-    {"type":"error","name":"ReentrancyGuardReentrantCall","inputs":[]},
-    {"type":"error","name":"UserActions__ActionAlreadyRecorded","inputs":[]},
-    {"type":"error","name":"UserActions__DistanceTooShort","inputs":[]},
-    {"type":"error","name":"UserActions__InvalidActionType","inputs":[]},
-    {"type":"error","name":"UserActions__InvalidAttestedStatus","inputs":[]},
-    {"type":"error","name":"UserActions__NotAttestationVerifier","inputs":[]},
-    {"type":"error","name":"UserActions__ProofAlreadyProcessed","inputs":[]},
-    {"type":"error","name":"UserActions__ProofVerificationFailed","inputs":[]},
-    {"type":"error","name":"UserActions__ProofsIncomplete","inputs":[]},
-    {"type":"error","name":"UserActions__TimestampTooOld","inputs":[]}
+    { type: "function", name: "ACTION_TYPE_TRANSPORT_B32", inputs: [], outputs: [{ name: "", type: "bytes32", internalType: "bytes32" }], stateMutability: "view" },
+    { type: "function", name: "MIN_DISTANCE_THRESHOLD_KM", inputs: [], outputs: [{ name: "", type: "uint256", internalType: "uint256" }], stateMutability: "view" },
+    { type: "function", name: "attestationVerifierAddress", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
+    { type: "function", name: "evidenceEmitterAddress", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
+    { type: "function", name: "isActionVerified", inputs: [{ name: "user", type: "address", internalType: "address" }, { name: "actionType", type: "bytes32", internalType: "bytes32" }, { name: "requiredTimestamp", type: "uint256", internalType: "uint256" }], outputs: [{ name: "", type: "bool", internalType: "bool" }], stateMutability: "view" },
+    { type: "function", name: "lastActionTimestamp", inputs: [{ name: "", type: "address", internalType: "address" }, { name: "", type: "bytes32", internalType: "bytes32" }], outputs: [{ name: "", type: "uint256", internalType: "uint256" }], stateMutability: "view" },
+    { type: "function", name: "owner", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
+    { type: "function", name: "processEvmProof", inputs: [{ name: "proofBytes", type: "bytes", internalType: "bytes" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "processJsonApiProof", inputs: [{ name: "_proof", type: "tuple", internalType: "struct IJsonApi.Proof", components: [{ name: "merkleProof", type: "bytes32[]", internalType: "bytes32[]" }, { name: "data", type: "tuple", internalType: "struct IJsonApi.Response", components: [{ name: "attestationType", type: "bytes32", internalType: "bytes32" }, { name: "sourceId", type: "bytes32", internalType: "bytes32" }, { name: "votingRound", type: "uint64", internalType: "uint64" }, { name: "lowestUsedTimestamp", type: "uint64", internalType: "uint64" }, { name: "requestBody", type: "tuple", internalType: "struct IJsonApi.RequestBody", components: [{ name: "url", type: "string", internalType: "string" }, { name: "postprocessJq", type: "string", internalType: "string" }, { name: "abi_signature", type: "string", internalType: "string" }] }, { name: "responseBody", type: "tuple", internalType: "struct IJsonApi.ResponseBody", components: [{ name: "abi_encoded_data", type: "bytes", internalType: "bytes" }] }] }] }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "recordVerifiedAction", inputs: [{ name: "user", type: "address", internalType: "address" }, { name: "actionType", type: "bytes32", internalType: "bytes32" }, { name: "timestamp", type: "uint256", internalType: "uint256" }, { name: "proofData", type: "bytes", internalType: "bytes" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "renounceOwnership", inputs: [], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "setAttestationVerifierAddress", inputs: [{ name: "_newVerifierAddress", type: "address", internalType: "address" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "transferOwnership", inputs: [{ name: "newOwner", type: "address", internalType: "address" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "validationStages", inputs: [{ name: "", type: "bytes32", internalType: "bytes32" }], outputs: [{ name: "", type: "uint8", internalType: "enum UserActions.ValidationStage" }], stateMutability: "view" },
+    { type: "event", name: "ActionRecorded", inputs: [{ name: "user", type: "address", indexed: true, internalType: "address" }, { name: "actionType", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "timestamp", type: "uint256", indexed: false, internalType: "uint256" }, { name: "proofData", type: "bytes", indexed: false, internalType: "bytes" }], anonymous: false },
+    { type: "event", name: "AttestationVerifierSet", inputs: [{ name: "newVerifier", type: "address", indexed: true, internalType: "address" }], anonymous: false },
+    { type: "event", name: "EvmProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false },
+    { type: "event", name: "JsonApiProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeActivityCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "activity", type: "string", indexed: false, internalType: "string" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeDecodeResult", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeDistanceCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "distance", type: "uint256", indexed: false, internalType: "uint256" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeStageUpdate", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "currentStage", type: "uint8", indexed: false, internalType: "enum UserActions.ValidationStage" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeStatusCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "status", type: "string", indexed: false, internalType: "string" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeVerify", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeVerifyCall", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false }
 ] as const;
 
-// CarbonCreditNFT ABI fragment for Claiming
 export const CLAIM_TRANSPORT_NFT_ABI: Abi = [
     {
         "inputs": [],
@@ -92,12 +80,10 @@ export const ERC721_ABI: Abi = [
     {"type":"function","name":"transferOwnership","inputs":[{"name":"newOwner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
 ] as const;
 
-// ABI fragment for RetirementLogic
 export const RETIREMENT_LOGIC_ABI: Abi = [
     { name: 'retireNFT', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable', type: 'function' },
 ] as const;
 
-// Full ABI for RetirementLogic (including events)
 export const RETIREMENT_LOGIC_FULL_ABI: Abi = [
     {"type":"constructor","inputs":[{"name":"_initialOwner","type":"address","internalType":"address"},{"name":"_carbonCreditNFT","type":"address","internalType":"address"},{"name":"_rewardNFT","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
     {"type":"function","name":"carbonCreditNFTAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
@@ -141,7 +127,6 @@ export const FTSO_READER_ABI: Abi = [
     {"type":"function","name":"USD_SYMBOL","inputs":[],"outputs":[{"name":"","type":"string","internalType":"string"}],"stateMutability":"view"},
     {"type":"function","name":"convertFlrToUsd","inputs":[{"name":"flrAmount","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"usdValue","type":"uint256","internalType":"uint256"},{"name":"usdDecimals","type":"uint8","internalType":"uint8"}],"stateMutability":"view"},
     {"type":"function","name":"ftsoRegistryAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    // Corrected getFlrUsdPrice output order
     {"type":"function","name":"getFlrUsdPrice","inputs":[],"outputs":[{"name":"price","type":"uint256","internalType":"uint256"},{"name":"decimals","type":"uint8","internalType":"uint8"},{"name":"timestamp","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
     {"type":"error","name":"FTSOReader__FtsoNotFound","inputs":[]},
     {"type":"error","name":"FTSOReader__PriceQueryFailed","inputs":[]}

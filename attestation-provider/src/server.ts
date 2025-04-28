@@ -49,7 +49,6 @@ if (!fdcHubAddress) throw new Error("FDC_HUB_ADDRESS is not set in .env");
 if (!userActionsAddress) throw new Error("USER_ACTIONS_ADDRESS is not set in .env");
 if (!evidenceEmitterAddress) throw new Error("EVIDENCE_EMITTER_ADDRESS is not set in .env"); // Add check
 
-// --- Coston2 Chain Definition & Wallet Client ---
 const coston2: Chain = {
   id: 114,
   name: 'Coston2',
@@ -59,7 +58,7 @@ const coston2: Chain = {
     symbol: 'C2FLR',
   },
   rpcUrls: {
-    default: { http: [coston2RpcUrl] }, // Use URL from .env
+    default: { http: [coston2RpcUrl] },
     public: { http: [coston2RpcUrl] },
   },
   blockExplorers: {
@@ -84,12 +83,11 @@ const openai = new OpenAI({
 // --- Constants ---
 const EXPECTED_ACTION_TYPE_TRANSPORT = "SUSTAINABLE_TRANSPORT_KM";
 
-const FDC_ATTESTATION_TYPE_JSONAPI_B32 = keccak256(toHex("JsonApi")); 
+const FDC_ATTESTATION_TYPE_JSONAPI_B32 = keccak256(toHex("IJsonApi")); 
 const FDC_ATTESTATION_TYPE_EVM_B32 = keccak256(toHex("EVMTransaction")); 
 const FDC_SOURCE_ID_WEB2_B32 = keccak256(toHex("WEB2")); 
 const FDC_SOURCE_ID_COSTON2_B32 = keccak256(toHex(evmSourceNameCoston2));
 
-// --- ABIs (Ensure UserActions ABI is updated) ---
 const FDC_FEE_CONFIG_ABI: Abi = [{"inputs":[{"internalType":"contract IGovernanceSettings","name":"_governanceSettings","type":"address"},{"internalType":"address","name":"_initialGovernance","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"allowedAfterTimestamp","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"encodedCall","type":"bytes"}],"name":"GovernanceCallTimelocked","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"initialGovernance","type":"address"}],"name":"GovernanceInitialised","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"governanceSettings","type":"address"}],"name":"GovernedProductionModeEntered","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TimelockedGovernanceCallCanceled","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TimelockedGovernanceCallExecuted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"attestationType","type":"bytes32"},{"indexed":true,"internalType":"bytes32","name":"source","type":"bytes32"}],"name":"TypeAndSourceFeeRemoved","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"attestationType","type":"bytes32"},{"indexed":true,"internalType":"bytes32","name":"source","type":"bytes32"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"}],"name":"TypeAndSourceFeeSet","type":"event"},{"inputs":[{"internalType":"bytes4","name":"_selector","type":"bytes4"}],"name":"cancelGovernanceCall","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"_selector","type":"bytes4"}],"name":"executeGovernanceCall","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes","name":"_data","type":"bytes"}],"name":"getRequestFee","outputs":[{"internalType":"uint256","name":"_fee","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"governance","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"governanceSettings","outputs":[{"internalType":"contract IGovernanceSettings","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"contract IGovernanceSettings","name":"_governanceSettings","type":"address"},{"internalType":"address","name":"_initialGovernance","type":"address"}],"name":"initialise","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_address","type":"address"}],"name":"isExecutor","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"productionMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"_type","type":"bytes32"},{"internalType":"bytes32","name":"_source","type":"bytes32"}],"name":"removeTypeAndSourceFee","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32[]","name":"_types","type":"bytes32[]"},{"internalType":"bytes32[]","name":"_sources","type":"bytes32[]"}],"name":"removeTypeAndSourceFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32","name":"_type","type":"bytes32"},{"internalType":"bytes32","name":"_source","type":"bytes32"},{"internalType":"uint256","name":"_fee","type":"uint256"}],"name":"setTypeAndSourceFee","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32[]","name":"_types","type":"bytes32[]"},{"internalType":"bytes32[]","name":"_sources","type":"bytes32[]"},{"internalType":"uint256[]","name":"_fees","type":"uint256[]"}],"name":"setTypeAndSourceFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"switchToProductionMode","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"selector","type":"bytes4"}],"name":"timelockedCalls","outputs":[{"internalType":"uint256","name":"allowedAfterTimestamp","type":"uint256"},{"internalType":"bytes","name":"encodedCall","type":"bytes"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"typeAndSource","type":"bytes32"}],"name":"typeAndSourceFees","outputs":[{"internalType":"uint256","name":"fee","type":"uint256"}],"stateMutability":"view","type":"function"}]; // MISSING_ABI
 
 const FLARE_SYSTEMS_MANAGER_ABI: Abi = [{"inputs":[{"internalType":"contract IGovernanceSettings","name":"_governanceSettings","type":"address"},{"internalType":"address","name":"_initialGovernance","type":"address"},{"internalType":"address","name":"_addressUpdater","type":"address"},{"internalType":"address","name":"_flareDaemon","type":"address"},{"components":[{"internalType":"uint16","name":"randomAcquisitionMaxDurationSeconds","type":"uint16"},{"internalType":"uint16","name":"randomAcquisitionMaxDurationBlocks","type":"uint16"},{"internalType":"uint16","name":"newSigningPolicyInitializationStartSeconds","type":"uint16"},{"internalType":"uint8","name":"newSigningPolicyMinNumberOfVotingRoundsDelay","type":"uint8"},{"internalType":"uint16","name":"voterRegistrationMinDurationSeconds","type":"uint16"},{"internalType":"uint16","name":"voterRegistrationMinDurationBlocks","type":"uint16"},{"internalType":"uint16","name":"submitUptimeVoteMinDurationSeconds","type":"uint16"},{"internalType":"uint16","name":"submitUptimeVoteMinDurationBlocks","type":"uint16"},{"internalType":"uint24","name":"signingPolicyThresholdPPM","type":"uint24"},{"internalType":"uint16","name":"signingPolicyMinNumberOfVoters","type":"uint16"},{"internalType":"uint32","name":"rewardExpiryOffsetSeconds","type":"uint32"}],"internalType":"struct FlareSystemsManager.Settings","name":"_settings","type":"tuple"},{"internalType":"uint32","name":"_firstVotingRoundStartTs","type":"uint32"},{"internalType":"uint8","name":"_votingEpochDurationSeconds","type":"uint8"},{"internalType":"uint32","name":"_firstRewardEpochStartVotingRoundId","type":"uint32"},{"internalType":"uint16","name":"_rewardEpochDurationInVotingEpochs","type":"uint16"},{"components":[{"internalType":"uint16","name":"initialRandomVotePowerBlockSelectionSize","type":"uint16"},{"internalType":"uint24","name":"initialRewardEpochId","type":"uint24"},{"internalType":"uint16","name":"initialRewardEpochThreshold","type":"uint16"}],"internalType":"struct FlareSystemsManager.InitialSettings","name":"_initialSettings","type":"tuple"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"ECDSAInvalidSignature","type":"error"},{"inputs":[{"internalType":"uint256","name":"length","type":"uint256"}],"name":"ECDSAInvalidSignatureLength","type":"error"},{"inputs":[{"internalType":"bytes32","name":"s","type":"bytes32"}],"name":"ECDSAInvalidSignatureS","type":"error"},{"inputs":[{"internalType":"uint8","name":"bits","type":"uint8"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"SafeCastOverflowedUintDowncast","type":"error"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint24","name":"rewardEpochId","type":"uint24"}],"name":"ClosingExpiredRewardEpochFailed","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"allowedAfterTimestamp","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"encodedCall","type":"bytes"}],"name":"GovernanceCallTimelocked","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"initialGovernance","type":"address"}],"name":"GovernanceInitialised","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"governanceSettings","type":"address"}],"name":"GovernedProductionModeEntered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"}],"name":"RandomAcquisitionStarted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":false,"internalType":"uint32","name":"startVotingRoundId","type":"uint32"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"}],"name":"RewardEpochStarted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":true,"internalType":"address","name":"signingPolicyAddress","type":"address"},{"indexed":true,"internalType":"address","name":"voter","type":"address"},{"indexed":false,"internalType":"bytes32","name":"rewardsHash","type":"bytes32"},{"components":[{"internalType":"uint256","name":"rewardManagerId","type":"uint256"},{"internalType":"uint256","name":"noOfWeightBasedClaims","type":"uint256"}],"indexed":false,"internalType":"struct IFlareSystemsManager.NumberOfWeightBasedClaims[]","name":"noOfWeightBasedClaims","type":"tuple[]"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"},{"indexed":false,"internalType":"bool","name":"thresholdReached","type":"bool"}],"name":"RewardsSigned","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint64","name":"blockNumber","type":"uint64"}],"name":"SettingCleanUpBlockNumberFailed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"}],"name":"SignUptimeVoteEnabled","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":true,"internalType":"address","name":"signingPolicyAddress","type":"address"},{"indexed":true,"internalType":"address","name":"voter","type":"address"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"},{"indexed":false,"internalType":"bool","name":"thresholdReached","type":"bool"}],"name":"SigningPolicySigned","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TimelockedGovernanceCallCanceled","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TimelockedGovernanceCallExecuted","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint24","name":"rewardEpochId","type":"uint24"}],"name":"TriggeringVoterRegistrationFailed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":true,"internalType":"address","name":"signingPolicyAddress","type":"address"},{"indexed":true,"internalType":"address","name":"voter","type":"address"},{"indexed":false,"internalType":"bytes32","name":"uptimeVoteHash","type":"bytes32"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"},{"indexed":false,"internalType":"bool","name":"thresholdReached","type":"bool"}],"name":"UptimeVoteSigned","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":true,"internalType":"address","name":"signingPolicyAddress","type":"address"},{"indexed":true,"internalType":"address","name":"voter","type":"address"},{"indexed":false,"internalType":"bytes20[]","name":"nodeIds","type":"bytes20[]"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"}],"name":"UptimeVoteSubmitted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint24","name":"rewardEpochId","type":"uint24"},{"indexed":false,"internalType":"uint64","name":"votePowerBlock","type":"uint64"},{"indexed":false,"internalType":"uint64","name":"timestamp","type":"uint64"}],"name":"VotePowerBlockSelected","type":"event"},{"inputs":[{"internalType":"bytes4","name":"_selector","type":"bytes4"}],"name":"cancelGovernanceCall","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"cleanupBlockNumberManager","outputs":[{"internalType":"contract IICleanupBlockNumberManager","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentRewardEpochExpectedEndTs","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"daemonize","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"_selector","type":"bytes4"}],"name":"executeGovernanceCall","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"firstRewardEpochStartTs","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"firstVotingRoundStartTs","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"flareDaemon","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getAddressUpdater","outputs":[{"internalType":"address","name":"_addressUpdater","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getContractName","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"getCurrentRewardEpoch","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentRewardEpochId","outputs":[{"internalType":"uint24","name":"","type":"uint24"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentVotingEpochId","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"}],"name":"getRandomAcquisitionInfo","outputs":[{"internalType":"uint64","name":"_randomAcquisitionStartTs","type":"uint64"},{"internalType":"uint64","name":"_randomAcquisitionStartBlock","type":"uint64"},{"internalType":"uint64","name":"_randomAcquisitionEndTs","type":"uint64"},{"internalType":"uint64","name":"_randomAcquisitionEndBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"}],"name":"getRewardEpochStartInfo","outputs":[{"internalType":"uint64","name":"_rewardEpochStartTs","type":"uint64"},{"internalType":"uint64","name":"_rewardEpochStartBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getRewardEpochSwitchoverTriggerContracts","outputs":[{"internalType":"contract IIRewardEpochSwitchoverTrigger[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"}],"name":"getRewardsSignInfo","outputs":[{"internalType":"uint64","name":"_rewardsSignStartTs","type":"uint64"},{"internalType":"uint64","name":"_rewardsSignStartBlock","type":"uint64"},{"internalType":"uint64","name":"_rewardsSignEndTs","type":"uint64"},{"internalType":"uint64","name":"_rewardsSignEndBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_rewardEpochId","type":"uint256"}],"name":"getSeed","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"}],"name":"getSigningPolicySignInfo","outputs":[{"internalType":"uint64","name":"_signingPolicySignStartTs","type":"uint64"},{"internalType":"uint64","name":"_signingPolicySignStartBlock","type":"uint64"},{"internalType":"uint64","name":"_signingPolicySignEndTs","type":"uint64"},{"internalType":"uint64","name":"_signingPolicySignEndBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_rewardEpochId","type":"uint256"}],"name":"getStartVotingRoundId","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_rewardEpochId","type":"uint256"}],"name":"getThreshold","outputs":[{"internalType":"uint16","name":"","type":"uint16"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"}],"name":"getUptimeVoteSignStartInfo","outputs":[{"internalType":"uint64","name":"_uptimeVoteSignStartTs","type":"uint64"},{"internalType":"uint64","name":"_uptimeVoteSignStartBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_rewardEpochId","type":"uint256"}],"name":"getVotePowerBlock","outputs":[{"internalType":"uint64","name":"_votePowerBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_rewardEpochId","type":"uint256"}],"name":"getVoterRegistrationData","outputs":[{"internalType":"uint256","name":"_votePowerBlock","type":"uint256"},{"internalType":"bool","name":"_enabled","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"internalType":"address","name":"_voter","type":"address"}],"name":"getVoterRewardsSignInfo","outputs":[{"internalType":"uint64","name":"_rewardsSignTs","type":"uint64"},{"internalType":"uint64","name":"_rewardsSignBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"internalType":"address","name":"_voter","type":"address"}],"name":"getVoterSigningPolicySignInfo","outputs":[{"internalType":"uint64","name":"_signingPolicySignTs","type":"uint64"},{"internalType":"uint64","name":"_signingPolicySignBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"internalType":"address","name":"_voter","type":"address"}],"name":"getVoterUptimeVoteSignInfo","outputs":[{"internalType":"uint64","name":"_uptimeVoteSignTs","type":"uint64"},{"internalType":"uint64","name":"_uptimeVoteSignBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"internalType":"address","name":"_voter","type":"address"}],"name":"getVoterUptimeVoteSubmitInfo","outputs":[{"internalType":"uint64","name":"_uptimeVoteSubmitTs","type":"uint64"},{"internalType":"uint64","name":"_uptimeVoteSubmitBlock","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"governance","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"governanceSettings","outputs":[{"internalType":"contract IGovernanceSettings","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"initialRandomVotePowerBlockSelectionSize","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"contract IGovernanceSettings","name":"_governanceSettings","type":"address"},{"internalType":"address","name":"_initialGovernance","type":"address"}],"name":"initialise","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_address","type":"address"}],"name":"isExecutor","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"isVoterRegistrationEnabled","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastInitializedVotingRoundId","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"newSigningPolicyInitializationStartSeconds","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"newSigningPolicyMinNumberOfVotingRoundsDelay","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"rewardEpochId","type":"uint256"},{"internalType":"uint256","name":"rewardManagerId","type":"uint256"}],"name":"noOfWeightBasedClaims","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"rewardEpochId","type":"uint256"}],"name":"noOfWeightBasedClaimsHash","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"productionMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"randomAcquisitionMaxDurationBlocks","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"randomAcquisitionMaxDurationSeconds","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"relay","outputs":[{"internalType":"contract IIRelay","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"rewardEpochDurationSeconds","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"rewardEpochIdToExpireNext","outputs":[{"internalType":"uint24","name":"","type":"uint24"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"rewardExpiryOffsetSeconds","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"rewardManager","outputs":[{"internalType":"contract IIRewardManager","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"rewardEpochId","type":"uint256"}],"name":"rewardsHash","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"contract IIRewardEpochSwitchoverTrigger[]","name":"_contracts","type":"address[]"}],"name":"setRewardEpochSwitchoverTriggerContracts","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"components":[{"internalType":"uint256","name":"rewardManagerId","type":"uint256"},{"internalType":"uint256","name":"noOfWeightBasedClaims","type":"uint256"}],"internalType":"struct IFlareSystemsManager.NumberOfWeightBasedClaims[]","name":"_noOfWeightBasedClaims","type":"tuple[]"},{"internalType":"bytes32","name":"_rewardsHash","type":"bytes32"}],"name":"setRewardsData","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bool","name":"_submit3Aligned","type":"bool"}],"name":"setSubmit3Aligned","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bool","name":"_triggerExpirationAndCleanup","type":"bool"}],"name":"setTriggerExpirationAndCleanup","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"contract IIVoterRegistrationTrigger","name":"_contract","type":"address"}],"name":"setVoterRegistrationTriggerContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"components":[{"internalType":"uint256","name":"rewardManagerId","type":"uint256"},{"internalType":"uint256","name":"noOfWeightBasedClaims","type":"uint256"}],"internalType":"struct IFlareSystemsManager.NumberOfWeightBasedClaims[]","name":"_noOfWeightBasedClaims","type":"tuple[]"},{"internalType":"bytes32","name":"_rewardsHash","type":"bytes32"},{"components":[{"internalType":"uint8","name":"v","type":"uint8"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"}],"internalType":"struct IFlareSystemsManager.Signature","name":"_signature","type":"tuple"}],"name":"signNewSigningPolicy","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"components":[{"internalType":"uint256","name":"rewardManagerId","type":"uint256"},{"internalType":"uint256","name":"noOfWeightBasedClaims","type":"uint256"}],"internalType":"struct IFlareSystemsManager.NumberOfWeightBasedClaims[]","name":"_noOfWeightBasedClaims","type":"tuple[]"},{"internalType":"bytes32","name":"_rewardsHash","type":"bytes32"},{"components":[{"internalType":"uint8","name":"v","type":"uint8"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"}],"internalType":"struct IFlareSystemsManager.Signature","name":"_signature","type":"tuple"}],"name":"signRewards","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"internalType":"bytes32","name":"_uptimeVoteHash","type":"bytes32"},{"components":[{"internalType":"uint8","name":"v","type":"uint8"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"}],"internalType":"struct IFlareSystemsManager.Signature","name":"_signature","type":"tuple"}],"name":"signUptimeVote","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"signingPolicyMinNumberOfVoters","outputs":[{"internalType":"uint16","name":"","type":"uint16"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"signingPolicyThresholdPPM","outputs":[{"internalType":"uint24","name":"","type":"uint24"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"submission","outputs":[{"internalType":"contract IISubmission","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"submit3Aligned","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint24","name":"_rewardEpochId","type":"uint24"},{"internalType":"bytes20[]","name":"_nodeIds","type":"bytes20[]"},{"components":[{"internalType":"uint8","name":"v","type":"uint8"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"}],"internalType":"struct IFlareSystemsManager.Signature","name":"_signature","type":"tuple"}],"name":"submitUptimeVote","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"submitUptimeVoteMinDurationBlocks","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"submitUptimeVoteMinDurationSeconds","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"switchToFallbackMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"switchToProductionMode","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"selector","type":"bytes4"}],"name":"timelockedCalls","outputs":[{"internalType":"uint256","name":"allowedAfterTimestamp","type":"uint256"},{"internalType":"bytes","name":"encodedCall","type":"bytes"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"triggerExpirationAndCleanup","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32[]","name":"_contractNameHashes","type":"bytes32[]"},{"internalType":"address[]","name":"_contractAddresses","type":"address[]"}],"name":"updateContractAddresses","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"uint16","name":"randomAcquisitionMaxDurationSeconds","type":"uint16"},{"internalType":"uint16","name":"randomAcquisitionMaxDurationBlocks","type":"uint16"},{"internalType":"uint16","name":"newSigningPolicyInitializationStartSeconds","type":"uint16"},{"internalType":"uint8","name":"newSigningPolicyMinNumberOfVotingRoundsDelay","type":"uint8"},{"internalType":"uint16","name":"voterRegistrationMinDurationSeconds","type":"uint16"},{"internalType":"uint16","name":"voterRegistrationMinDurationBlocks","type":"uint16"},{"internalType":"uint16","name":"submitUptimeVoteMinDurationSeconds","type":"uint16"},{"internalType":"uint16","name":"submitUptimeVoteMinDurationBlocks","type":"uint16"},{"internalType":"uint24","name":"signingPolicyThresholdPPM","type":"uint24"},{"internalType":"uint16","name":"signingPolicyMinNumberOfVoters","type":"uint16"},{"internalType":"uint32","name":"rewardExpiryOffsetSeconds","type":"uint32"}],"internalType":"struct FlareSystemsManager.Settings","name":"_settings","type":"tuple"}],"name":"updateSettings","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"rewardEpochId","type":"uint256"}],"name":"uptimeVoteHash","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"voterRegistrationMinDurationBlocks","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"voterRegistrationMinDurationSeconds","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"voterRegistrationTriggerContract","outputs":[{"internalType":"contract IIVoterRegistrationTrigger","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"voterRegistry","outputs":[{"internalType":"contract IIVoterRegistry","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"votingEpochDurationSeconds","outputs":[{"internalType":"uint64","name":"","type":"uint64"}],"stateMutability":"view","type":"function"}]; // MISSING_ABI
@@ -124,45 +122,35 @@ const EVIDENCE_EMITTER_ABI: Abi = [
     }
 ] as const;
 
-// Add UserActions ABI here for use in proof submission
-// TODO: Ensure this ABI is the final one from build artifacts
-const USER_ACTIONS_ABI: Abi = [
-    {"type":"constructor","inputs":[{"name":"_initialOwner","type":"address","internalType":"address"},{"name":"_attestationVerifierAddress","type":"address","internalType":"address"},{"name":"_evidenceEmitterAddress","type":"address","internalType":"address"}],"stateMutability":"nonpayable"},
-    {"type":"function","name":"ACTION_TYPE_TRANSPORT_B32","inputs":[],"outputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"stateMutability":"view"},
-    {"type":"function","name":"MIN_DISTANCE_THRESHOLD_KM","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
-    {"type":"function","name":"attestationVerifierAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"evidenceEmitterAddress","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"isActionVerified","inputs":[{"name":"user","type":"address","internalType":"address"},{"name":"actionType","type":"bytes32","internalType":"bytes32"},{"name":"requiredTimestamp","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},
-    {"type":"function","name":"lastActionTimestamp","inputs":[{"name":"","type":"address","internalType":"address"},{"name":"","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},
-    {"type":"function","name":"owner","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},
-    {"type":"function","name":"processEvmProof","inputs":[{"name":"proofBytes","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"processJsonApiProof","inputs":[{"name":"proofBytes","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"recordVerifiedAction","inputs":[{"name":"user","type":"address","internalType":"address"},{"name":"actionType","type":"bytes32","internalType":"bytes32"},{"name":"timestamp","type":"uint256","internalType":"uint256"},{"name":"proofData","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"renounceOwnership","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"setAttestationVerifierAddress","inputs":[{"name":"_newVerifierAddress","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"transferOwnership","inputs":[{"name":"newOwner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},
-    {"type":"function","name":"validationStages","inputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"uint8","internalType":"enum UserActions.ValidationStage"}],"stateMutability":"view"},
-    {"type":"event","name":"ActionRecorded","inputs":[{"name":"user","type":"address","indexed":true,"internalType":"address"},{"name":"actionType","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"timestamp","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"proofData","type":"bytes","indexed":false,"internalType":"bytes"}],"anonymous":false},
-    {"type":"event","name":"AttestationVerifierSet","inputs":[{"name":"newVerifier","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"event","name":"EvmProofProcessed","inputs":[{"name":"validationId","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"userAddress","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"event","name":"JsonApiProofProcessed","inputs":[{"name":"validationId","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"userAddress","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"event","name":"OwnershipTransferred","inputs":[{"name":"previousOwner","type":"address","indexed":true,"internalType":"address"},{"name":"newOwner","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},
-    {"type":"error","name":"OwnableInvalidOwner","inputs":[{"name":"owner","type":"address","internalType":"address"}]},
-    {"type":"error","name":"OwnableUnauthorizedAccount","inputs":[{"name":"account","type":"address","internalType":"address"}]},
-    {"type":"error","name":"ReentrancyGuardReentrantCall","inputs":[]},
-    {"type":"error","name":"UserActions__ActionAlreadyRecorded","inputs":[]},
-    {"type":"error","name":"UserActions__DistanceTooShort","inputs":[]},
-    {"type":"error","name":"UserActions__InvalidActionType","inputs":[]},
-    {"type":"error","name":"UserActions__InvalidAttestedStatus","inputs":[]},
-    {"type":"error","name":"UserActions__NotAttestationVerifier","inputs":[]},
-    {"type":"error","name":"UserActions__ProofAlreadyProcessed","inputs":[]},
-    {"type":"error","name":"UserActions__ProofVerificationFailed","inputs":[]},
-    {"type":"error","name":"UserActions__ProofsIncomplete","inputs":[]},
-    {"type":"error","name":"UserActions__TimestampTooOld","inputs":[]}
+export const USER_ACTIONS_ABI: Abi = [
+    { type: "function", name: "ACTION_TYPE_TRANSPORT_B32", inputs: [], outputs: [{ name: "", type: "bytes32", internalType: "bytes32" }], stateMutability: "view" },
+    { type: "function", name: "MIN_DISTANCE_THRESHOLD_KM", inputs: [], outputs: [{ name: "", type: "uint256", internalType: "uint256" }], stateMutability: "view" },
+    { type: "function", name: "attestationVerifierAddress", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
+    { type: "function", name: "evidenceEmitterAddress", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
+    { type: "function", name: "isActionVerified", inputs: [{ name: "user", type: "address", internalType: "address" }, { name: "actionType", type: "bytes32", internalType: "bytes32" }, { name: "requiredTimestamp", type: "uint256", internalType: "uint256" }], outputs: [{ name: "", type: "bool", internalType: "bool" }], stateMutability: "view" },
+    { type: "function", name: "lastActionTimestamp", inputs: [{ name: "", type: "address", internalType: "address" }, { name: "", type: "bytes32", internalType: "bytes32" }], outputs: [{ name: "", type: "uint256", internalType: "uint256" }], stateMutability: "view" },
+    { type: "function", name: "owner", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
+    { type: "function", name: "processEvmProof", inputs: [{ name: "proofBytes", type: "bytes", internalType: "bytes" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "processJsonApiProof", inputs: [{ name: "_proof", type: "tuple", internalType: "struct IJsonApi.Proof", components: [{ name: "merkleProof", type: "bytes32[]", internalType: "bytes32[]" }, { name: "data", type: "tuple", internalType: "struct IJsonApi.Response", components: [{ name: "attestationType", type: "bytes32", internalType: "bytes32" }, { name: "sourceId", type: "bytes32", internalType: "bytes32" }, { name: "votingRound", type: "uint64", internalType: "uint64" }, { name: "lowestUsedTimestamp", type: "uint64", internalType: "uint64" }, { name: "requestBody", type: "tuple", internalType: "struct IJsonApi.RequestBody", components: [{ name: "url", type: "string", internalType: "string" }, { name: "postprocessJq", type: "string", internalType: "string" }, { name: "abi_signature", type: "string", internalType: "string" }] }, { name: "responseBody", type: "tuple", internalType: "struct IJsonApi.ResponseBody", components: [{ name: "abi_encoded_data", type: "bytes", internalType: "bytes" }] }] }] }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "recordVerifiedAction", inputs: [{ name: "user", type: "address", internalType: "address" }, { name: "actionType", type: "bytes32", internalType: "bytes32" }, { name: "timestamp", type: "uint256", internalType: "uint256" }, { name: "proofData", type: "bytes", internalType: "bytes" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "renounceOwnership", inputs: [], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "setAttestationVerifierAddress", inputs: [{ name: "_newVerifierAddress", type: "address", internalType: "address" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "transferOwnership", inputs: [{ name: "newOwner", type: "address", internalType: "address" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "validationStages", inputs: [{ name: "", type: "bytes32", internalType: "bytes32" }], outputs: [{ name: "", type: "uint8", internalType: "enum UserActions.ValidationStage" }], stateMutability: "view" },
+    { type: "event", name: "ActionRecorded", inputs: [{ name: "user", type: "address", indexed: true, internalType: "address" }, { name: "actionType", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "timestamp", type: "uint256", indexed: false, internalType: "uint256" }, { name: "proofData", type: "bytes", indexed: false, internalType: "bytes" }], anonymous: false },
+    { type: "event", name: "AttestationVerifierSet", inputs: [{ name: "newVerifier", type: "address", indexed: true, internalType: "address" }], anonymous: false },
+    { type: "event", name: "EvmProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false },
+    { type: "event", name: "JsonApiProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeActivityCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "activity", type: "string", indexed: false, internalType: "string" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeDecodeResult", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeDistanceCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "distance", type: "uint256", indexed: false, internalType: "uint256" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeStageUpdate", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "currentStage", type: "uint8", indexed: false, internalType: "enum UserActions.ValidationStage" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeStatusCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "status", type: "string", indexed: false, internalType: "string" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeVerify", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false },
+    { type: "event", name: "DebugJsonProof_BeforeVerifyCall", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false }
 ] as const;
 
 // --- Interfaces & Storage ---
-
 interface VisionVerificationResult {
   activityType?: string; // e.g., "cycling", "walking", "other"
   distanceKm?: number;
@@ -170,16 +158,16 @@ interface VisionVerificationResult {
   error?: string; // Error message from AI parsing
 }
 
-// --- Interfaces mirroring Solidity structs for FDC --- 
-// Based on IJsonApi.sol
 interface IJsonApiRequestBody {
     url: string;
     postprocessJq: string;
     abi_signature: string;
 }
+
 interface IJsonApiResponseBody {
     abi_encoded_data: Hex;
 }
+
 interface IJsonApiResponse {
     attestationType: Hex; // bytes32
     sourceId: Hex; // bytes32
@@ -188,12 +176,12 @@ interface IJsonApiResponse {
     requestBody: IJsonApiRequestBody;
     responseBody: IJsonApiResponseBody;
 }
+
 interface IJsonApiProof {
     merkleProof: Hex[]; // bytes32[]
     data: IJsonApiResponse;
 }
 
-// Based on IEVMTransaction.sol
 interface IEVMTransactionRequestBody {
     transactionHash: Hex; // bytes32
     requiredConfirmations: number; // uint16
@@ -201,6 +189,7 @@ interface IEVMTransactionRequestBody {
     listEvents: boolean;
     logIndices: number[]; // uint32[]
 }
+
 interface IEVMTransactionEvent {
     logIndex: number; // uint32
     emitterAddress: Address;
@@ -208,6 +197,7 @@ interface IEVMTransactionEvent {
     data: Hex;
     removed: boolean;
 }
+
 interface IEVMTransactionResponseBody {
     blockNumber: bigint; // uint64
     timestamp: bigint; // uint64
@@ -219,6 +209,7 @@ interface IEVMTransactionResponseBody {
     status: number; // uint8
     events: IEVMTransactionEvent[];
 }
+
 interface IEVMTransactionResponse {
     attestationType: Hex; // bytes32
     sourceId: Hex; // bytes32
@@ -227,12 +218,12 @@ interface IEVMTransactionResponse {
     requestBody: IEVMTransactionRequestBody;
     responseBody: IEVMTransactionResponseBody;
 }
+
 interface IEVMTransactionProof {
     merkleProof: Hex[]; // bytes32[]
     data: IEVMTransactionResponse;
 }
 
-// --- Storage for Validation Results ---
 interface ValidationRecord {
     status: 'verified' | 'failed' | 'pending_fdc' | 'complete' | 'error_processing'; // Added 'verified' state
     userAddress: Address;
@@ -245,6 +236,7 @@ interface ValidationRecord {
     jsonApiRoundId?: number;
     jsonApiRequestBytes?: Hex;
     jsonApiRequestId?: Hex; // Added
+    jsonApiRequestBody?: IJsonApiRequestBody; // Added: Store the request body
     evmRoundId?: number;
     evmRequestBytes?: Hex;
     evmRequestId?: Hex; // Added
@@ -743,8 +735,11 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
 
             // 4. Prepare JsonApi FDC Request
             const jsonApiUrl = `${providerPublicBaseUrl}/api/v1/validation-result/${validationId}`;
-            // Restore status component to ABI signature to match contract
-            const jsonApiAbiSignature = '{"components":[{"internalType":"string","name":"status","type":"string"},{"internalType":"address","name":"userAddress","type":"address"},{"internalType":"uint256","name":"distanceKm","type":"uint256"},{"internalType":"string","name":"activityType","type":"string"},{"internalType":"uint256","name":"validationTimestamp","type":"uint256"},{"internalType":"bytes32","name":"validationId","type":"bytes32"}],"type":"tuple"}';
+            // Restore status component to ABI signature to match contract AND examples
+            // Include top-level name field as per examples
+            const jsonApiAbiSignature = '{"components":[{"internalType":"string","name":"status","type":"string"},{"internalType":"address","name":"userAddress","type":"address"},{"internalType":"uint256","name":"distanceKm","type":"uint256"},{"internalType":"string","name":"activityType","type":"string"},{"internalType":"uint256","name":"validationTimestamp","type":"uint256"},{"internalType":"bytes32","name":"validationId","type":"bytes32"}],"name":"OffChainValidationResult","type":"tuple"}'; // Added top-level name
+            // JQ Verifier just needs the sequence of types to encode the output of postprocessJq
+            // const jsonApiAbiSignature = 'string,address,uint256,string,uint256,bytes32'; // Incorrect based on examples
             const jsonApiRequestBody = {
                 url: jsonApiUrl,
                 // Explicitly construct the object matching the abi_signature using JQ
@@ -754,8 +749,17 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
                 postprocessJq: '{status: "verified", userAddress: (.userAddress | ascii_downcase), distanceKm: .distanceKm, activityType: .activityType, validationTimestamp: .validationTimestamp, validationId: ("0x" + .validationId)}', 
                 abi_signature: jsonApiAbiSignature
             };
+
+            // --- DEBUG LOGGING: JsonApi Request Body Before Prep ---
+            console.log(`[DEBUG /request-attestation] JsonApi Request Body (to prepare):`, JSON.stringify(jsonApiRequestBody, null, 2));
+            // --- END DEBUG LOGGING ---
+
             const jsonApiEncodedRequest = await prepareFdcRequest('IJsonApi', 'WEB2', jsonApiRequestBody); // Revert back to "IJsonApi"
             if (!jsonApiEncodedRequest) throw new Error("Failed to prepare JsonApi FDC request");
+
+            // --- DEBUG LOGGING: Prepared JsonApi Request Bytes ---
+            console.log(`[DEBUG /request-attestation] Prepared JsonApi Request Bytes: ${jsonApiEncodedRequest}`);
+            // --- END DEBUG LOGGING ---
 
             // 5. Prepare EVMTransaction FDC Request
             const evmRequestBody = {
@@ -783,6 +787,10 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
             finalRecord.jsonApiRoundId = jsonApiRoundId;
             finalRecord.jsonApiRequestBytes = jsonApiEncodedRequest;
             finalRecord.jsonApiRequestId = keccak256(jsonApiEncodedRequest); // Calculate and store ID
+            // --- DEBUG LOGGING: Calculated JsonApi Request ID ---
+            console.log(`[DEBUG /request-attestation] Calculated JsonApi Request ID: ${finalRecord.jsonApiRequestId}`);
+            // --- END DEBUG LOGGING ---
+            finalRecord.jsonApiRequestBody = jsonApiRequestBody; // Store the request body object
             finalRecord.evmRoundId = evmRoundId;
             finalRecord.evmRequestBytes = evmEncodedRequest;
             finalRecord.evmRequestId = keccak256(evmEncodedRequest); // Calculate and store ID
@@ -825,9 +833,9 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
         return res.status(404).json({ error: 'Validation record not found' });
     }
 
-    // Revert check back to requestBytes
-    if (!record.jsonApiRoundId || !record.jsonApiRequestBytes || !record.evmRoundId || !record.evmRequestBytes) {
-        return res.status(400).json({ error: 'FDC request details (round/request bytes) missing in record, cannot retrieve proofs yet.' });
+    // Check required fields, including the stored request body
+    if (!record.jsonApiRoundId || !record.jsonApiRequestBytes || !record.evmRoundId || !record.evmRequestBytes || !record.jsonApiRequestBody) {
+        return res.status(400).json({ error: 'FDC request details (round/request bytes/request body) missing in record, cannot retrieve proofs yet.' });
     }
     
     // Allow retrying if status is pending_fdc or error_processing
@@ -845,51 +853,125 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
     let evmProofTxHash: Hex | null = null;
 
     try {
-        // 1. Fetch Proofs from DA Layer using Request Bytes (Reverted)
+        // 1. Fetch Proofs from DA Layer using Request Bytes
         console.log("Fetching JsonApi proof using Request Bytes...");
-        const jsonApiProofData = await getProofFromDALayer(record.jsonApiRoundId!, record.jsonApiRequestBytes!); // Use getProofFromDALayer
+        const jsonApiProofData = await getProofFromDALayer(record.jsonApiRoundId!, record.jsonApiRequestBytes!); 
         if (!jsonApiProofData) throw new Error("Failed to retrieve JsonApi proof from DA Layer using Request Bytes");
 
         console.log("Fetching EVM proof using Request Bytes...");
-        const evmProofData = await getProofFromDALayer(record.evmRoundId!, record.evmRequestBytes!); // Use getProofFromDALayer
+        const evmProofData = await getProofFromDALayer(record.evmRoundId!, record.evmRequestBytes!); 
         if (!evmProofData) throw new Error("Failed to retrieve EVM proof from DA Layer using Request Bytes");
 
-        // 2. ABI-encode Proofs for Contract Call
-        console.log("Encoding proofs for contract call...");
+        // --- [DEBUG] Log stored Request Body, ID --- 
+        console.log(`[DEBUG /submit-proofs] Stored JsonApi Request ID: ${record.jsonApiRequestId}`);
+        console.log(`[DEBUG /submit-proofs] Stored JsonApi Request Body:`, JSON.stringify(record.jsonApiRequestBody, null, 2)); // Log original request body
+        console.log(`[DEBUG /submit-proofs] Raw responseHex from DA Layer for JsonApi:`, jsonApiProofData.responseHex); // Log raw hex
+        // --- Removed Debug decoding attempt for the old tuple structure ---
 
-        // Define ABI parameter types for the Proof structs expected by UserActions.sol
-        const jsonApiProofAbiType = [{ type: 'bytes32[]', name: 'merkleProof' }, { type: 'tuple', name: 'data', components: [{ type: 'bytes32', name: 'attestationType' }, { type: 'bytes32', name: 'sourceId' }, { type: 'uint64', name: 'votingRound' }, { type: 'uint64', name: 'lowestUsedTimestamp' }, { type: 'tuple', name: 'requestBody', components: [{ type: 'string', name: 'url' }, { type: 'string', name: 'postprocessJq' }, { type: 'string', name: 'abi_signature' }] }, { type: 'tuple', name: 'responseBody', components: [{ type: 'bytes', name: 'abi_encoded_data' }] }] }];
+        // 2. Define ABIs and Reconstruct/Encode Proofs
+        console.log("Decoding DA responses and reconstructing proofs for encoding...");
+
+        // --- Define ABIs for Encoding the final proofs to send to the contract --- 
+        // ABI for the *outer* IJsonApi.Response structure returned in responseHex by DA layer
+        const jsonApiResponseAbiType = [
+            { type: 'bytes32', name: 'attestationType' }, 
+            { type: 'bytes32', name: 'sourceId' }, 
+            { type: 'uint64', name: 'votingRound' }, 
+            { type: 'uint64', name: 'lowestUsedTimestamp' }, 
+            { 
+                type: 'tuple', 
+                name: 'requestBody', 
+                components: [
+                    { type: 'string', name: 'url' }, 
+                    { type: 'string', name: 'postprocessJq' }, 
+                    { type: 'string', name: 'abi_signature' }
+                ] 
+            }, 
+            { 
+                type: 'tuple', 
+                name: 'responseBody', 
+                components: [
+                     { type: 'bytes', name: 'abi_encoded_data' } // This holds the INNER encoded data
+                ] 
+            } 
+        ];
+        // ABI for the IJsonApi.Proof struct that the UserActions contract expects
+        const jsonApiProofContractInputAbiType = [
+            { type: 'bytes32[]', name: 'merkleProof' }, 
+            { type: 'tuple', name: 'data', components: jsonApiResponseAbiType } 
+        ];
+
         const evmProofAbiType = [{ type: 'bytes32[]', name: 'merkleProof' }, { type: 'tuple', name: 'data', components: [{ type: 'bytes32', name: 'attestationType' }, { type: 'bytes32', name: 'sourceId' }, { type: 'uint64', name: 'votingRound' }, { type: 'uint64', name: 'lowestUsedTimestamp' }, { type: 'tuple', name: 'requestBody', components: [{ type: 'bytes32', name: 'transactionHash' }, { type: 'uint16', name: 'requiredConfirmations' }, { type: 'bool', name: 'provideInput' }, { type: 'bool', name: 'listEvents' }, { type: 'uint32[]', name: 'logIndices' }] }, { type: 'tuple', name: 'responseBody', components: [{ type: 'uint64', name: 'blockNumber' }, { type: 'uint64', name: 'timestamp' }, { type: 'address', name: 'sourceAddress' }, { type: 'bool', name: 'isDeployment' }, { type: 'address', name: 'receivingAddress' }, { type: 'uint256', name: 'value' }, { type: 'bytes', name: 'input' }, { type: 'uint8', name: 'status' }, { type: 'tuple[]', name: 'events', components: [{ type: 'uint32', name: 'logIndex' }, { type: 'address', name: 'emitterAddress' }, { type: 'bytes32[]', name: 'topics' }, { type: 'bytes', name: 'data' }, { type: 'bool', name: 'removed' }] }] }] }];
+        const evmResponseAbiType = [ evmProofAbiType[1] ]; // Decode the 'data' tuple directly
+
+        // --- JsonApi Proof Construction --- 
+        // 1. Decode the *entire* IJsonApi.Response struct from the DA layer's responseHex
+        let decodedOuterJsonResponse: IJsonApiResponse;
+        try {
+            // Wrap the single tuple in an array for decodeAbiParameters
+            // Use explicit 'as unknown as [Type]' assertion for stricter type checking
+            const [decodedResult] = decodeAbiParameters([ { type: 'tuple', components: jsonApiResponseAbiType } ], jsonApiProofData.responseHex) as unknown as [IJsonApiResponse];
+            decodedOuterJsonResponse = decodedResult;
+            console.log("Successfully decoded outer IJsonApi.Response from DA Layer responseHex.");
+        } catch (error: any) {
+             console.error("Failed to decode outer IJsonApi.Response from DA Layer responseHex:", jsonApiProofData.responseHex, error);
+             throw new Error("Could not decode the structure returned by the DA Layer for JsonApi proof.");
+        }
+
+        // 2. Extract the *inner* abi_encoded_data (which contains the OffChainValidationResult)
+        const innerAbiEncodedData = decodedOuterJsonResponse.responseBody.abi_encoded_data;
+        if (!innerAbiEncodedData || innerAbiEncodedData === '0x') {
+             throw new Error("Extracted inner abi_encoded_data for OffChainValidationResult is empty or invalid.");
+        }
+         console.log(`[DEBUG /submit-proofs] Extracted INNER abi_encoded_data (OffChainValidationResult): ${innerAbiEncodedData}`);
+
+
+        // --- EVM Proof Construction --- 
+        // Decode the EVM response data from the DA Layer responseHex
+        const [decodedEvmResponseData] = decodeAbiParameters(evmResponseAbiType, evmProofData.responseHex) as [IEVMTransactionResponse];
+        if (!decodedEvmResponseData) {
+             throw new Error("Could not decode EVM response data from DA Layer responseHex");
+        }
+        console.log("Successfully decoded actual EVMTransactionResponse from DA Layer.");
         
-        // Define ABI parameter types for the Response structs inside the proofs
-        const jsonApiResponseAbiType = [{ type: 'tuple', name: 'data', components: jsonApiProofAbiType[1].components }];
-        const evmResponseAbiType = [{ type: 'tuple', name: 'data', components: evmProofAbiType[1].components }];
+        // Use lowest timestamp from EVM proof or fallback to 0
+        const lowestTimestampToUse = decodedEvmResponseData.lowestUsedTimestamp ? BigInt(decodedEvmResponseData.lowestUsedTimestamp) : BigInt(0); 
+        console.log(`Using lowestUsedTimestamp for proofs: ${lowestTimestampToUse}`);
 
-        // Decode the responseHex from DA Layer into structured Response objects
-        const [decodedJsonApiResponse] = decodeAbiParameters(jsonApiResponseAbiType, jsonApiProofData.responseHex) as [IJsonApiResponse];
-        const [decodedEvmResponse] = decodeAbiParameters(evmResponseAbiType, evmProofData.responseHex) as [IEVMTransactionResponse];
 
-        // Construct the full Proof objects using merkleProof and the *decoded* Response data
-        const fullJsonApiProof: IJsonApiProof = {
-            merkleProof: jsonApiProofData.merkleProof,
-            data: decodedJsonApiResponse
+        // 3. Reconstruct the full IJsonApi.Response object to match the *contract's expectation*
+        //    This means putting the *extracted inner data* into the responseBody.
+        const reconstructedJsonResponseDataForContract: IJsonApiResponse = {
+            attestationType: FDC_ATTESTATION_TYPE_JSONAPI_B32, // Use constant from FDC system
+            sourceId: FDC_SOURCE_ID_WEB2_B32,             // Use constant from FDC system
+            votingRound: BigInt(record.jsonApiRoundId!),   // Use stored round ID
+            lowestUsedTimestamp: lowestTimestampToUse,      // Use consistent timestamp from EVM proof
+            requestBody: record.jsonApiRequestBody!,      // Use the original request body we sent
+            responseBody: { 
+                abi_encoded_data: innerAbiEncodedData // *** Use the EXTRACTED inner data here ***
+            } 
         };
-        const fullEvmProof: IEVMTransactionProof = {
+
+        // 4. Construct the final IJsonApi.Proof object to send to the contract
+        const finalJsonApiProofForContract: IJsonApiProof = {
+            merkleProof: jsonApiProofData.merkleProof, // Use Merkle proof from DA layer
+            data: reconstructedJsonResponseDataForContract // Use the manually reconstructed response with extracted inner data
+        };
+
+        // --- EVM Proof Construction (using the decoded data) --- 
+        const finalEvmProofForContract: IEVMTransactionProof = {
             merkleProof: evmProofData.merkleProof,
-            data: decodedEvmResponse
+            // Update the lowestUsedTimestamp in the EVM proof data to match the one used in JsonApi proof for consistency?
+            // data: { ...decodedEvmResponseData, lowestUsedTimestamp: lowestTimestampToUse } // This might be needed if contract compares them
+            data: decodedEvmResponseData // Or keep as is if contract doesn't compare
         };
-
-        // Encode the full Proof objects for the contract call
-        const jsonProofBytes = encodeAbiParameters(
-            jsonApiProofAbiType,
-            [fullJsonApiProof.merkleProof, fullJsonApiProof.data]
-        );
-
+        // Encode the EVM proof struct to send to the contract's processEvmProof function
         const evmProofBytes = encodeAbiParameters(
-            evmProofAbiType,
-            [fullEvmProof.merkleProof, fullEvmProof.data]
+            evmProofAbiType, 
+            [finalEvmProofForContract.merkleProof, finalEvmProofForContract.data] 
         );
-        console.log("Proofs encoded successfully.");
+
+        console.log("Proofs reconstructed successfully.");
 
         // 3. Submit Proofs On-Chain
         console.log(`Submitting JsonApi proof for ${validationId} to UserActions...`);
@@ -897,19 +979,27 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
             address: userActionsAddress!,
             abi: USER_ACTIONS_ABI,
             functionName: 'processJsonApiProof',
-            args: [jsonProofBytes] // Pass the encoded proof
+            args: [finalJsonApiProofForContract],
+            gas: BigInt(3000000)
         });
         console.log(`JsonApi proof submitted, txHash: ${jsonApiProofTxHash}`);
-        await walletClient.waitForTransactionReceipt({ hash: jsonApiProofTxHash });
-        console.log(`JsonApi proof tx confirmed: ${jsonApiProofTxHash}`);
-        record.jsonApiProofTxHash = jsonApiProofTxHash;
+        // Wait for receipt even if it fails, to get the logs
+        try {
+             await walletClient.waitForTransactionReceipt({ hash: jsonApiProofTxHash });
+             console.log(`JsonApi proof tx potentially confirmed (or reverted with logs): ${jsonApiProofTxHash}`);
+        } catch (receiptError: any) {
+             console.warn(`Error waiting for JsonApi proof receipt (tx likely reverted, check logs): ${receiptError.shortMessage || receiptError.message}`);
+             // Continue even if receipt shows failure, we need the tx hash
+        }
+        record.jsonApiProofTxHash = jsonApiProofTxHash; // Record hash regardless of success/failure
 
         console.log(`Submitting EVM proof for ${validationId} to UserActions...`);
         evmProofTxHash = await walletClient.writeContract({
             address: userActionsAddress!,
             abi: USER_ACTIONS_ABI,
             functionName: 'processEvmProof',
-            args: [evmProofBytes] // Pass the encoded proof
+            args: [evmProofBytes],
+            gas: BigInt(3000000)
         });
         console.log(`EVM proof submitted, txHash: ${evmProofTxHash}`);
         await walletClient.waitForTransactionReceipt({ hash: evmProofTxHash });
@@ -932,12 +1022,8 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
     } catch (error: any) {
         console.error(`Error during proof submission for ${validationId}:`, error);
         record.status = 'error_processing';
-        // Update error message to reflect Request Bytes failure if applicable
-        const errorMessage = error.message?.includes('DA Layer') ? 
-                            error.message.replace('Request ID', 'Request Bytes') : 
-                            (error.message || 'Unknown proof submission error');
+        const errorMessage = error.message || 'Unknown proof submission error';
         record.errorMessage = errorMessage;
-        // Store partial tx hashes if available
         if (jsonApiProofTxHash) record.jsonApiProofTxHash = jsonApiProofTxHash;
         if (evmProofTxHash) record.evmProofTxHash = evmProofTxHash;
         validationStore.set(validationId as Hex, record);
