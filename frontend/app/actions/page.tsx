@@ -15,7 +15,7 @@ import {
     USER_ACTIONS_ABI,
     CLAIM_TRANSPORT_NFT_ABI
 } from '@/config/contracts';
-import { keccak256, toHex, decodeEventLog } from 'viem';
+import { keccak256, toHex, decodeEventLog, type Address, type Hex } from 'viem';
 import Confetti from 'react-confetti';
 
 // Constants for action types
@@ -77,29 +77,53 @@ export default function ActionsPage() {
         }));
     };
 
+    // --- Read Last Action Timestamps (Get refetch function) --- 
+    const { data: lastTempTimestampData, refetch: refetchTempTimestamp } = useReadContract({
+        address: USER_ACTIONS_ADDRESS,
+        abi: USER_ACTIONS_ABI,
+        functionName: 'lastActionTimestamp',
+        args: [userAddress!, ACTION_TYPE_TEMP_B32],
+        query: { enabled: !!userAddress },
+    });
+    const { data: lastTransportTimestampData, refetch: refetchTransportTimestamp } = useReadContract({
+        address: USER_ACTIONS_ADDRESS,
+        abi: USER_ACTIONS_ABI,
+        functionName: 'lastActionTimestamp',
+        args: [userAddress!, ACTION_TYPE_TRANSPORT_B32],
+        query: { enabled: !!userAddress },
+    });
+
     // --- Status Polling Logic ---
 
     const stopStatusPolling = useCallback((actionType: string) => {
-        const status = actionStatuses[actionType];
-        if (status.pollingIntervalId) {
-            clearInterval(status.pollingIntervalId);
-            updateActionStatus(actionType, { pollingIntervalId: null });
-            console.log(`Stopped polling for ${actionType}`);
-        }
-    }, [actionStatuses]); // Dependency needed to access current status state
+        // Use a functional update to safely access the latest state
+        setActionStatuses(prev => {
+            const status = prev[actionType];
+            if (status?.pollingIntervalId) {
+                clearInterval(status.pollingIntervalId);
+                console.log(`Stopped polling for ${actionType}`);
+                // Return the updated state slice
+                return {
+                    ...prev,
+                    [actionType]: { ...status, pollingIntervalId: null }
+                };
+            }
+            // Return previous state if no interval found
+            return prev; 
+        });
+    }, []); // No dependencies needed for this pattern
 
     const checkStatus = useCallback(async (actionType: string, validationId: string) => {
         console.log(`Checking status for ${actionType} (${validationId})...`);
         try {
             const response = await fetch(`${ATTESTATION_PROVIDER_API_URL}/api/v1/validation-result/${validationId}`);
             if (!response.ok) {
-                // If record not found yet, keep polling silently for a bit
                 if (response.status === 404) {
                     console.log(`Validation record ${validationId} not found yet, continuing poll.`);
                     updateActionStatus(actionType, { currentStatus: "Provider processing request..." });
                     return; 
                 }
-                const errorData = await response.json().catch(() => ({})); // Catch JSON parse errors
+                const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.error || `Failed to fetch status: ${response.statusText}`);
             }
 
@@ -112,12 +136,12 @@ export default function ActionsPage() {
             }
             updateActionStatus(actionType, { 
                 currentStatus: statusMessage, 
-                backendStatus: data.status // Store the raw backend status
+                backendStatus: data.status 
             });
 
             // Handle final states
             if (data.status === 'complete') {
-                console.log(`Verification complete for ${validationId}. Enabling claim.`);
+                console.log(`Verification complete for ${validationId}. Enabling claim and refetching timestamp.`);
                 updateActionStatus(actionType, {
                     canClaim: true,
                     verifySuccessMessage: "Verification process complete! Ready to claim.",
@@ -125,16 +149,17 @@ export default function ActionsPage() {
                     verifyError: null,
                 });
                 stopStatusPolling(actionType); // Stop polling on success
-            } else if (data.status === 'error_processing') {
-                console.error(`Processing error for ${validationId}:`, data.errorMessage);
-                updateActionStatus(actionType, {
-                    verifyError: `Processing failed: ${data.errorMessage || 'Unknown provider error'}`,
-                    currentStatus: `Error: ${data.errorMessage || 'Unknown provider error'}`,
-                    canClaim: false,
-                });
-                stopStatusPolling(actionType); // Stop polling on error
-            } else if (data.status === 'failed') { // Handle OpenAI failure reported by provider
-                 console.error(`Verification failed for ${validationId}:`, data.errorMessage);
+
+                // *** EXPLICITLY REFETCH TIMESTAMP ***
+                if (actionType === ACTION_TYPE_TRANSPORT) {
+                    console.log("Refetching transport timestamp...");
+                    await refetchTransportTimestamp(); 
+                } else if (actionType === ACTION_TYPE_TEMP) {
+                    // Add refetch for temp if needed later
+                    // await refetchTempTimestamp(); 
+                }
+            } else if (data.status === 'error_processing' || data.status === 'failed') {
+                 console.error(`Processing error/failure for ${validationId}:`, data.errorMessage);
                  updateActionStatus(actionType, {
                      verifyError: `Verification failed: ${data.errorMessage || 'Provider reported failure.'}`,
                      currentStatus: `Failed: ${data.errorMessage || 'Provider reported failure.'}`,
@@ -152,67 +177,47 @@ export default function ActionsPage() {
             });
             stopStatusPolling(actionType); // Stop polling on fetch error
         }
-    }, [stopStatusPolling]); // Include stopStatusPolling
+    // Add refetch functions to dependencies
+    }, [stopStatusPolling, refetchTransportTimestamp, refetchTempTimestamp]); 
 
     const startStatusPolling = useCallback((actionType: string, validationId: string) => {
-        // Clear any existing interval for this action type first
         stopStatusPolling(actionType);
+        console.log(`Starting status polling loop for ${actionType} (${validationId})`);
+        // Don't call checkStatus immediately, let the interval handle the first check
+        // checkStatus(actionType, validationId); 
 
-        console.log(`Starting status polling for ${actionType} (${validationId})`);
-        // Initial check immediately
-        checkStatus(actionType, validationId);
-
-        // Then poll every 5 seconds (adjust interval as needed)
         const intervalId = setInterval(() => {
-            // Refetch the validationId from the state inside the interval
-            // This ensures we use the latest state if handleVerify is called again quickly
-            const currentValidationId = actionStatuses[actionType]?.validationId;
-            if (currentValidationId) {
-                 checkStatus(actionType, currentValidationId);
-            } else {
-                 console.warn(`Polling interval for ${actionType} found no validationId, stopping.`);
-                 stopStatusPolling(actionType); // Should not happen ideally
-            }
-           
+            console.log(`Polling interval fired for ${actionType}, validationId: ${validationId}. Calling checkStatus...`);
+            // Access validationId via functional update in updateActionStatus if needed
+            // For simplicity, assume validationId remains stable during polling here
+             checkStatus(actionType, validationId); 
         }, 5000); // Poll every 5 seconds
 
-        updateActionStatus(actionType, { pollingIntervalId: intervalId });
-    }, [checkStatus, stopStatusPolling, actionStatuses]); // actionStatuses needed for check inside interval
+        updateActionStatus(actionType, { 
+            pollingIntervalId: intervalId,
+            // Set an initial polling status message
+            currentStatus: "Polling provider for status updates..." 
+        });
+    }, [checkStatus, stopStatusPolling]); // checkStatus now includes refetch dependencies
 
-    // --- Cleanup polling intervals on unmount or user change ---
+    // --- Cleanup polling intervals on unmount ---
     useEffect(() => {
         return () => {
-            Object.keys(actionStatuses).forEach(actionType => {
-                stopStatusPolling(actionType);
-            });
+            Object.keys(actionStatuses).forEach(stopStatusPolling);
         };
-    }, [stopStatusPolling]); // Only needs stopStatusPolling which has actionStatuses dependency internally
+    }, [stopStatusPolling]); 
 
-    // --- Read Last Action Timestamps --- 
-    const { data: lastTempTimestampData } = useReadContract({
-        address: USER_ACTIONS_ADDRESS,
-        abi: USER_ACTIONS_ABI,
-        functionName: 'lastActionTimestamp',
-        args: [userAddress!, ACTION_TYPE_TEMP_B32],
-        query: { enabled: !!userAddress },
-    });
-    const { data: lastTransportTimestampData } = useReadContract({
-        address: USER_ACTIONS_ADDRESS,
-        abi: USER_ACTIONS_ABI,
-        functionName: 'lastActionTimestamp',
-        args: [userAddress!, ACTION_TYPE_TRANSPORT_B32],
-        query: { enabled: !!userAddress },
-    });
-
-    // Update state when timestamps are fetched
+    // Update state when timestamps are fetched/refetched
     useEffect(() => {
         if (lastTempTimestampData !== undefined) {
+            console.log(`Updating Temp Timestamp from hook: ${Number(lastTempTimestampData)}`);
             updateActionStatus(ACTION_TYPE_TEMP, { lastRecordedTimestamp: Number(lastTempTimestampData) });
         }
     }, [lastTempTimestampData]);
 
     useEffect(() => {
         if (lastTransportTimestampData !== undefined) {
+             console.log(`Updating Transport Timestamp from hook: ${Number(lastTransportTimestampData)}`);
             updateActionStatus(ACTION_TYPE_TRANSPORT, { lastRecordedTimestamp: Number(lastTransportTimestampData) });
         }
     }, [lastTransportTimestampData]);
@@ -225,17 +230,16 @@ export default function ActionsPage() {
             isVerifying: true, 
             verifyError: null, 
             verifySuccessMessage: null, 
-            claimError: null, // Clear previous claim errors too
-            claimSuccessTx: null, // Clear previous tx
-            canClaim: false, // Reset claim status
-            validationId: null, // Reset validation ID
-            currentStatus: 'Initiating verification...' // Show initial status
+            claimError: null,
+            claimSuccessTx: null, 
+            canClaim: false, 
+            validationId: null, 
+            currentStatus: 'Initiating verification...' 
         });
 
         const status = actionStatuses[actionType];
         let requestBody: any = { userAddress, actionType };
 
-        // --- Prepare image data if it's the transport action ---
         if (actionType === ACTION_TYPE_TRANSPORT) {
             if (!status.selectedFile) {
                  updateActionStatus(actionType, { isVerifying: false, verifyError: "Please select a screenshot file first." });
@@ -244,7 +248,7 @@ export default function ActionsPage() {
             updateActionStatus(actionType, { isReadingFile: true });
             try {
                 const base64String = await readFileAsBase64(status.selectedFile);
-                requestBody.imageBase64 = base64String; // <-- Fix: Use imageBase64 instead of screenshotBase64
+                requestBody.imageBase64 = base64String; 
             } catch (error) {
                 console.error("Error reading file:", error);
                 updateActionStatus(actionType, { isVerifying: false, isReadingFile: false, verifyError: "Failed to read the selected file." });
@@ -253,7 +257,6 @@ export default function ActionsPage() {
                  updateActionStatus(actionType, { isReadingFile: false });
             }
         }
-        // --- --- 
 
         try {
             console.log("Sending verification request to Attestation Provider...");
@@ -264,30 +267,21 @@ export default function ActionsPage() {
             });
 
             const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || `Verification request failed: ${response.statusText}`);
-            }
-
-            console.log("Verification initiated response:", data);
-            if (!data.validationId) {
-                throw new Error("Attestation provider did not return a validation ID.");
-            }
+            if (!response.ok) throw new Error(data.error || `Verification request failed: ${response.statusText}`);
+            if (!data.validationId) throw new Error("Attestation provider did not return a validation ID.");
             
-            // Store validationId and update status
+            console.log("Verification initiated response:", data);
             updateActionStatus(actionType, { 
                 validationId: data.validationId,
                 currentStatus: "Verification initiated. Waiting for FDC processing...", 
                 verifySuccessMessage: null, 
                 verifyError: null 
             });
-            
-            // Start polling for status updates 
-            startStatusPolling(actionType, data.validationId); // <--- Call start polling
+            startStatusPolling(actionType, data.validationId); 
             
         } catch (error: any) {
              console.error("Verification error:", error);
-             stopStatusPolling(actionType); // Stop polling if initial request fails
+             stopStatusPolling(actionType); 
              updateActionStatus(actionType, { verifyError: error.message || "An unknown error occurred during verification." });
         } finally {
             updateActionStatus(actionType, { isVerifying: false });
@@ -300,58 +294,35 @@ export default function ActionsPage() {
         abi: USER_ACTIONS_ABI,
         eventName: 'ActionRecorded',
         onLogs(logs) {
-            console.log('ActionRecorded event logs:', logs);
+            console.log('ActionRecorded event logs received:', logs);
             logs.forEach(log => {
                 try {
-                    // Explicitly decode the event log
                     const decodedLog = decodeEventLog({
-                        abi: USER_ACTIONS_ABI,
-                        data: log.data,
-                        topics: log.topics,
-                        eventName: 'ActionRecorded'
+                        abi: USER_ACTIONS_ABI, data: log.data, topics: log.topics, eventName: 'ActionRecorded'
                     });
 
-                    // --- Type Guard --- 
-                    // Check if args exists, is an object, and has the required properties
-                    if ( 
-                        !decodedLog.args || 
-                        typeof decodedLog.args !== 'object' || 
-                        Array.isArray(decodedLog.args) ||
-                        !('user' in decodedLog.args) || 
-                        !('actionType' in decodedLog.args) ||
-                        !('timestamp' in decodedLog.args)
-                    ) {
-                        console.error("Decoded log args are missing, not an object, or missing properties:", decodedLog.args);
-                        return; // Skip this log entry
+                    if (!decodedLog.args || typeof decodedLog.args !== 'object' || Array.isArray(decodedLog.args) ||
+                        !('user' in decodedLog.args) || !('actionType' in decodedLog.args) || !('timestamp' in decodedLog.args)) {
+                        console.error("Decoded log args invalid:", decodedLog.args); return; 
                     }
                     
-                    // --- Access args directly after guard (TypeScript should infer types now) --- 
-                    const user = decodedLog.args.user as `0x${string}`; // Cast specific properties if needed
-                    const eventActionTypeB32 = decodedLog.args.actionType as `0x${string}`;
-                    const timestamp = decodedLog.args.timestamp as bigint;
-                    
-                    // Check if any cast resulted in undefined (extra safety)
-                    if (typeof user === 'undefined' || typeof eventActionTypeB32 === 'undefined' || typeof timestamp === 'undefined') {
-                         console.error("One or more decoded args properties are undefined after access:", decodedLog.args);
-                         return; // Skip this log entry
-                    }
-                    
-                    // --- Proceed with logic --- 
+                    const { user, actionType: eventActionTypeB32, timestamp } = decodedLog.args as { user: Address, actionType: Hex, timestamp: bigint };
+                                        
                     if (user === userAddress) {
-                        const actionType = Object.keys(actionStatuses).find(key => 
+                         const actionType = Object.keys(actionStatuses).find(key => 
                             (key === ACTION_TYPE_TEMP && eventActionTypeB32 === ACTION_TYPE_TEMP_B32) ||
                             (key === ACTION_TYPE_TRANSPORT && eventActionTypeB32 === ACTION_TYPE_TRANSPORT_B32)
                         );
 
                         if (actionType) {
-                            console.log(`Action ${actionType} recorded for current user at timestamp ${timestamp}. Enabling claim.`);
+                            console.log(`ActionRecorded event detected for ${actionType}, user ${user}. Updating timestamp: ${Number(timestamp)}`);
                             updateActionStatus(actionType, {
                                 lastRecordedTimestamp: Number(timestamp),
-                                canClaim: true,
-                                verifySuccessMessage: `Action successfully recorded on-chain at ${new Date(Number(timestamp) * 1000).toLocaleString()}! You can now claim your NFT.`
+                                // Maybe update canClaim here too as a fallback? 
+                                // canClaim: true, 
+                                // verifySuccessMessage: `Action successfully recorded via event listener!` // Optional message
                             });
-                            // stopStatusPolling(actionType); // Stop polling when event confirms success
-                            updateActionStatus(actionType, { isVerifying: false, verifyError: null }); 
+                            // Don't necessarily stop polling here, let checkStatus confirm 'complete' from provider
                         }
                     }
                 } catch (error) {
@@ -361,7 +332,6 @@ export default function ActionsPage() {
         },
         onError(error) {
             console.error('Error watching ActionRecorded event:', error);
-            // Optionally show a toast error
         }
     });
 
@@ -375,41 +345,38 @@ export default function ActionsPage() {
 
         let claimFunctionName: 'claimTemperatureNFT' | 'claimTransportNFT';
         let writeAsyncFunction: typeof claimTempNFTAsync | typeof claimTransportNFTAsync;
+        let abiToUse: typeof USER_ACTIONS_ABI | typeof CLAIM_TRANSPORT_NFT_ABI;
         
         if (actionType === ACTION_TYPE_TEMP) {
             claimFunctionName = 'claimTemperatureNFT';
             writeAsyncFunction = claimTempNFTAsync;
-            console.warn("Claiming Temp NFT requires the full CarbonCreditNFT ABI which is not currently exported in contracts.ts");
-            updateActionStatus(actionType, { claimError: "Missing full NFT ABI for temp claim", isClaiming: false });
-            return;
+            abiToUse = USER_ACTIONS_ABI; // Assume full ABI needed? Needs verification
+            console.warn("Claiming Temp NFT requires the full CarbonCreditNFT ABI - ensure CLAIM_TRANSPORT_NFT_ABI is appropriate or update it.");
+             updateActionStatus(actionType, { claimError: "Temp claim ABI needs confirmation.", isClaiming: false });
+             return; // Temporarily disable temp claim until ABI is confirmed
         } else if (actionType === ACTION_TYPE_TRANSPORT) {
             claimFunctionName = 'claimTransportNFT';
              writeAsyncFunction = claimTransportNFTAsync;
+             abiToUse = CLAIM_TRANSPORT_NFT_ABI; // Use specific ABI for transport claim
         } else {
             updateActionStatus(actionType, { claimError: "Invalid action type for claiming", isClaiming: false });
             return;
         }
 
         try {
-            const abiToUse = actionType === ACTION_TYPE_TRANSPORT 
-                ? CLAIM_TRANSPORT_NFT_ABI
-                : USER_ACTIONS_ABI;
-            
-            // This check is redundant since we already handle this case above
-            // and actionType can only be ACTION_TYPE_TRANSPORT at this point
-            
             const hash = await writeAsyncFunction({
                 address: CARBON_CREDIT_NFT_ADDRESS,
                 abi: abiToUse,
                 functionName: claimFunctionName,
-                args: []
+                args: [] // Assuming no args needed for claim functions
             });
             console.log(`Claim transaction sent for ${actionType}:`, hash);
             updateActionStatus(actionType, { claimSuccessTx: hash });
         } catch (error: any) {
             console.error(`Claim error for ${actionType}:`, error);
-            updateActionStatus(actionType, { claimError: error.shortMessage || error.message || "Claiming failed.", isClaiming: false });
-            toast.error("Claim Error ", { description: error.shortMessage || error.message });
+            const shortMessage = error.shortMessage || error.message || "Claiming failed.";
+            updateActionStatus(actionType, { claimError: shortMessage, isClaiming: false });
+            toast.error("Claim Error ", { description: shortMessage });
         } 
     };
 
@@ -452,7 +419,7 @@ export default function ActionsPage() {
             updateActionStatus(actionType, { 
                 selectedFile: file, 
                 selectedFileName: file.name,
-                verifyError: null, // Clear previous verify errors when new file is selected
+                verifyError: null, 
                 verifySuccessMessage: null
              });
         }
@@ -477,27 +444,23 @@ export default function ActionsPage() {
         }
 
         console.log(`Submitting proofs for ${actionType}, validationId: ${status.validationId}`);
-        // Use isVerifying state to show loading on the button
         updateActionStatus(actionType, { 
-            isVerifying: true, // Re-use isVerifying for loading state 
+            isVerifying: true, // Re-use for loading state 
             verifyError: null, 
             verifySuccessMessage: null, 
             currentStatus: "Submitting proofs to UserActions contract..."
         });
-        // Stop polling while submitting proofs, it will restart if needed or stop on final state
         stopStatusPolling(actionType);
 
         try {
             const response = await fetch(`${ATTESTATION_PROVIDER_API_URL}/submit-proofs/${status.validationId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                // No body needed for this endpoint based on current backend structure
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                 // Handle specific non-OK statuses if needed (e.g., 501 Not Implemented)
                 if (response.status === 501) {
                     throw new Error("Proof submission endpoint is not implemented on the provider.");
                 } 
@@ -505,35 +468,32 @@ export default function ActionsPage() {
             }
 
             console.log("Proof submission response:", data);
-            // Proof submission successful, update status and restart polling to confirm 'complete'
             updateActionStatus(actionType, { 
                 isVerifying: false,
                 currentStatus: "Proofs submitted. Checking final status...",
-                // Optionally store proof tx hashes from data if needed: data.jsonApiProofTxHash, data.evmProofTxHash
             });
-            // Restart polling to wait for the 'complete' status from the backend
             startStatusPolling(actionType, status.validationId);
             toast.info("Processing", { description: "Proofs submitted, waiting for final confirmation..." });
 
         } catch (error: any) {
             console.error("Proof submission error:", error);
+            const shortMessage = error.message || "An unknown error occurred during proof submission.";
             updateActionStatus(actionType, { 
                 isVerifying: false, 
-                verifyError: error.message || "An unknown error occurred during proof submission.",
-                currentStatus: `Proof Submission Error: ${error.message}`
+                verifyError: shortMessage,
+                currentStatus: `Proof Submission Error: ${shortMessage}`
              });
-            toast.error("Error", { description: `Proof submission failed: ${error.message}` });
-            // Consider if polling should restart on submission error or just stop
+            toast.error("Error", { description: `Proof submission failed: ${shortMessage}` });
         }
     };
 
     // --- Render Helper --- 
     const renderActionCard = (actionType: string, title: string, description: string) => {
         const status = actionStatuses[actionType];
-        // Combine processing states
         const isProcessing = status.isVerifying || status.isClaiming || status.isReadingFile || status.pollingIntervalId !== null; 
-        // Check the backendStatus directly
         const isAwaitingProofSubmission = status.backendStatus === 'pending_fdc'; 
+        // *** Define explicit boolean for claim button enabled state ***
+        const isClaimEnabled = isConnected && status.canClaim && status.lastRecordedTimestamp > 0 && !isProcessing;
 
         return (
             <Card key={actionType}>
@@ -542,15 +502,12 @@ export default function ActionsPage() {
                     <CardDescription>{description}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {/* --- File Input for Transport Action --- */} 
                     {actionType === ACTION_TYPE_TRANSPORT && (
                         <div className="space-y-2">
                              <label htmlFor={`file-upload-${actionType}`} className="text-sm font-medium">Upload Screenshot:</label>
                             <div className="flex items-center space-x-2">
                                 <Input 
-                                    id={`file-upload-${actionType}`} 
-                                    type="file" 
-                                    accept="image/*" 
+                                    id={`file-upload-${actionType}`} type="file" accept="image/*" 
                                     onChange={(e) => handleFileChange(actionType, e)}
                                     className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
                                     disabled={isProcessing}
@@ -559,11 +516,10 @@ export default function ActionsPage() {
                             </div>
                         </div>
                     )}
-                    {/* --- --- */} 
 
                     <Button 
                         onClick={() => handleVerify(actionType)} 
-                        // Disable if connected but already verifying/claiming/polling/awaiting proof or can claim
+                        // Keep existing disable logic for verify button
                         disabled={!isConnected || isProcessing || status.canClaim } 
                         className="w-full"
                     >
@@ -571,7 +527,6 @@ export default function ActionsPage() {
                         {status.pollingIntervalId ? 'Checking Status...' : `Verify ${actionType === ACTION_TYPE_TRANSPORT ? (status.selectedFile ? 'Selected Screenshot' : 'Transport') : 'Condition'}`}
                     </Button>
 
-                    {/* Display Current Status during polling */}
                     {status.pollingIntervalId && status.currentStatus && !status.verifyError && !status.verifySuccessMessage && (
                          <Alert variant="default" className="flex items-center">
                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -586,7 +541,6 @@ export default function ActionsPage() {
                             <AlertDescription>{status.verifyError}</AlertDescription>
                         </Alert>
                     )}
-                    {/* Display final success message only when polling stops and canClaim is true */}
                     {status.verifySuccessMessage && status.canClaim && (
                          <Alert variant="default">
                             <CheckCircle className="h-4 w-4" />
@@ -595,14 +549,11 @@ export default function ActionsPage() {
                         </Alert>
                     )}
                     
-                    {/* --- Proof Submission Button (Phase 5 - Step 4) --- */}
-                    {/* Show button if status is pending_fdc (or similar intermediate state) */}
                     {isAwaitingProofSubmission && (
                          <Button 
-                            onClick={() => handleSubmitProofs(actionType)} // Call the new handler
-                            disabled={!isConnected || status.isVerifying || status.isClaiming} // Disable while verifying/claiming
-                            className="w-full"
-                            variant="secondary"
+                            onClick={() => handleSubmitProofs(actionType)} 
+                            disabled={!isConnected || status.isVerifying || status.isClaiming} 
+                            className="w-full" variant="secondary"
                          >
                              {status.isVerifying && status.currentStatus?.includes("Submitting proofs") && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
                             Check & Submit Proofs
@@ -611,10 +562,9 @@ export default function ActionsPage() {
 
                     <Button 
                         onClick={() => handleClaim(actionType)} 
-                        // Only enable claim if explicitly allowed AND not processing something else
-                        disabled={!isConnected || !status.canClaim || isProcessing } 
-                        className="w-full"
-                        variant="outline"
+                        // Use the calculated boolean for disabled state
+                        disabled={!isClaimEnabled} 
+                        className="w-full" variant="outline"
                     >
                         {status.isClaiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Claim {title} NFT
@@ -640,6 +590,10 @@ export default function ActionsPage() {
                     <p className="text-xs text-muted-foreground">
                         Last Recorded: {status.lastRecordedTimestamp > 0 ? new Date(status.lastRecordedTimestamp * 1000).toLocaleString() : 'Never'}
                     </p>
+                    {/* Debug display */}
+                    {/* <p className="text-xs text-red-500 ml-4">
+                        Debug: canClaim={status.canClaim.toString()}, ts={status.lastRecordedTimestamp}, isProcessing={isProcessing.toString()}, isEnabled={isClaimEnabled.toString()}
+                    </p> */}
                 </CardFooter>
             </Card>
         );
