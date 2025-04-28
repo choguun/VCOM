@@ -1,22 +1,31 @@
-# VCOM Contracts - Verifiable Carbon Offset Marketplace
+# VCOM - Verifiable Carbon Offset Marketplace
 
-This directory contains the Solidity smart contracts for the Verifiable Carbon Offset Marketplace (VCOM) project, built using Foundry for the Flare Network (Coston2 Testnet).
+VCOM is a proof-of-concept decentralized application demonstrating a marketplace for verifiable carbon offset credits tokenized as NFTs on the Flare Network (Coston2 Testnet). It leverages Flare's unique protocols (FDC, FTSO, RNG) to enhance transparency and trust in the carbon market.
 
 ## Table of Contents
 
 *   [Problem & Solution](#problem--solution)
-*   [Technical Overview](#technical-overview)
-*   [Architecture](#architecture)
+*   [Technology Stack](#technology-stack)
+*   [Overall Architecture](#overall-architecture)
     *   [Mermaid Diagram](#mermaid-diagram)
 *   [Project Structure](#project-structure)
-*   [Getting Started](#getting-started)
+*   [Detailed Verification Flow (FDC + OpenAI Vision)](#detailed-verification-flow-fdc--openai-vision)
+    *   [Flow Steps](#flow-steps)
+    *   [Sequence Diagram](#sequence-diagram)
+*   [Subsystems](#subsystems)
+    *   [Contracts](#contracts-subsystem)
+    *   [Frontend](#frontend-subsystem)
+    *   [Attestation Provider](#attestation-provider-subsystem)
+*   [Getting Started / Setup](#getting-started--setup)
     *   [Prerequisites](#prerequisites)
     *   [Installation](#installation)
-*   [Usage](#usage)
-    *   [Configuration](#configuration)
-    *   [Compile](#compile)
-    *   [Test](#test)
-    *   [Deploy](#deploy)
+    *   [Environment Configuration](#environment-configuration)
+*   [Running the Project](#running-the-project)
+    *   [Contracts](#contracts)
+    *   [Attestation Provider](#attestation-provider)
+    *   [Frontend](#frontend)
+*   [Deployment](#deployment)
+*   [Flare Development Experience Notes](#flare-development-experience-notes)
 
 ## Problem & Solution
 
@@ -24,222 +33,333 @@ This directory contains the Solidity smart contracts for the Verifiable Carbon O
 
 **Solution:** VCOM leverages blockchain technology and Flare Network's unique protocols (FTSO, FDC, State Connector) to create a transparent and verifiable marketplace.
 *   Carbon credits are tokenized as unique NFTs (ERC721).
-*   Environmental actions required for minting credits can be verified on-chain using external data sources via the Flare State Connector and FDC Attestation Provider.
+*   Environmental actions required for minting credits are verified on-chain using FDC attestations referencing both off-chain data (validated via OpenAI Vision and served by an Attestation Provider endpoint) and on-chain events emitted by a dedicated `EvidenceEmitter` contract.
 *   A decentralized marketplace allows peer-to-peer trading of these verified credits using FLR tokens.
 *   Pricing incorporates real-time FLR/USD data from the Flare Time Series Oracle (FTSO).
 *   Retiring credits (burning the NFT) is gamified with potential rewards (Reward NFTs) determined by Flare's RNG.
 
-## Technical Overview
+## Technology Stack
 
-*   **Blockchain:** Flare Network (Coston2 Testnet for development/testing)
-*   **Smart Contracts:** Solidity ^0.8.20
-*   **Development Framework:** Foundry
-*   **Key Flare Protocols:**
-    *   **FTSO (Flare Time Series Oracle):** Used via `FTSOReader.sol` to get reliable FLR/USD price data.
-    *   **State Connector & FDC:** Intended for use with `UserActions.sol` to verify off-chain environmental actions via external APIs (Attestation Provider implementation is separate).
-    *   **Flare RNG:** Used within `RetirementLogic.sol` for gamified retirement rewards.
-*   **Token Standards:** ERC721 (OpenZeppelin implementation) for Carbon Credit NFTs and Reward NFTs.
-*   **Access Control:** OpenZeppelin `Ownable` and potentially `AccessControl` where needed.
+*   **Frontend:** Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, wagmi, viem
+*   **Contracts:** Solidity ^0.8.20, Foundry, OpenZeppelin, Flare Periphery Contracts
+*   **Attestation Provider:** Node.js, TypeScript, Express, Viem, OpenAI API
+*   **Blockchain:** Flare Network (Coston2 Testnet)
+*   **Package Manager:** pnpm (using workspaces)
 
-## Architecture
+## Overall Architecture
 
-The core contract system consists of the following interconnected components:
+The project follows a monorepo structure containing three main components:
 
-1.  **`CarbonCreditNFT.sol`**: An ERC721 contract representing the verifiable carbon credits. Mints NFTs based on verified actions recorded in `UserActions`. Includes logic for transferring and burning (retiring) NFTs, controlled by `Marketplace` and `RetirementLogic` respectively.
-2.  **`Marketplace.sol`**: Facilitates the listing, buying, and cancelling of `CarbonCreditNFT` listings using FLR as the payment currency. Interacts with `CarbonCreditNFT` for ownership transfers.
-3.  **`UserActions.sol`**: Stores the state of verified user environmental actions. Intended to be updated by a trusted Attestation Provider (off-chain component) interacting with the Flare State Connector/FDC. `CarbonCreditNFT` checks this contract before minting.
-4.  **`FTSOReader.sol`**: Reads the FLR/USD price feed from the Flare FTSO system contracts (using `ContractRegistry` and `FtsoV2Interface`). Used by the frontend to display USD equivalent prices.
-5.  **`RetirementLogic.sol`**: Handles the process of retiring a `CarbonCreditNFT`. It verifies ownership, calls the `burn` function on the NFT contract, requests a random number from the Flare RNG, and potentially triggers the minting of a `RewardNFT` based on the outcome.
-6.  **`RewardNFT.sol`**: A separate ERC721 contract for issuing reward NFTs based on the gamified retirement process managed by `RetirementLogic`. Only `RetirementLogic` should have minting privileges.
+1.  **Frontend:** A Next.js application providing the user interface for interacting with the marketplace, viewing NFTs, and initiating action verification.
+2.  **Contracts:** Solidity smart contracts deployed on Coston2, defining the NFTs, marketplace logic, and verification handling (`UserActions`).
+3.  **Attestation Provider:** An off-chain Node.js service responsible for validating user-submitted data (e.g., analyzing images with OpenAI Vision), emitting on-chain evidence events, submitting FDC requests, and serving validation data for FDC proofs.
 
 ### Mermaid Diagram
 
 ```mermaid
-graph LR
-    subgraph VCOM Contracts
+graph TD
+    subgraph User Interface
+        Frontend[Next.js dApp]
+    end
+
+    subgraph Off-Chain Services
+        AP[Attestation Provider (Node.js)]
+        OpenAI[OpenAI Vision API]
+    end
+
+    subgraph Blockchain (Coston2)
         direction LR
-        UA[UserActions] -- Records action --> NFT[(CarbonCreditNFT)]
-        NFT -- Manages ownership --> M[Marketplace]
-        M -- Transfers FLR/NFT --> NFT
-        NFT -- Burn triggered by --> RL[RetirementLogic]
-        RL -- Mints reward --> RNFT[(RewardNFT)]
-        RL -- Reads ownership --> NFT
-        FTSO[FTSOReader]
+        subgraph VCOM Contracts
+            EE[EvidenceEmitter]
+            UA[UserActions]
+            NFT[(CarbonCreditNFT)]
+            M[Marketplace]
+            RL[RetirementLogic]
+            RNFT[(RewardNFT)]
+            FTSO_Reader[FTSOReader]
+        end
+        subgraph Flare Network Systems
+            FDC[FDC Hub & Verifiers]
+            FTSO[FTSO System]
+            RNG[RNG System]
+            DA[DA Layer]
+        end
     end
 
-    subgraph External Flare Systems
-        direction TB
-        FTSO_System[Flare FTSO System]
-        FDC_System[Flare State Connector / FDC]
-        RNG_System[Flare RNG]
-    end
+    Frontend -- Interacts with --> M
+    Frontend -- Interacts with --> NFT
+    Frontend -- Interacts with --> RL
+    Frontend -- Interacts with --> RNFT
+    Frontend -- Reads Price --> FTSO_Reader
+    Frontend -- Triggers Verification --> AP
+    Frontend -- Submits FDC Proofs --> UA
 
-    subgraph Off-Chain Components
-        AP[Attestation Provider]
-        Frontend[dApp Frontend]
-    end
+    AP -- Analyzes Image --> OpenAI
+    AP -- Calls emitEvidence --> EE
+    AP -- Submits FDC Requests --> FDC
+    AP -- Serves Validation Data --> FDC %% Via JsonApi URL
 
-    AP -->|Submits proof| FDC_System
-    FDC_System -->|Verified data| UA
-    RL -->|Requests random number| RNG_System
-    RNG_System -->|Provides number| RL
-    FTSO -->|Reads price| FTSO_System
-    Frontend -->|Reads price| FTSO
-    Frontend -->|Reads listings/NFTs| M
-    Frontend -->|Reads NFTs| NFT
-    Frontend -->|Reads rewards| RNFT
-    Frontend -->|Initiates retire| RL
-    Frontend -->|Initiates list/buy/cancel| M
-    Frontend -->|Triggers verification| AP
+    FDC -- Verifies & Stores Attestations --> DA
 
+    UA -- Verifies FDC Proofs against --> DA
+    UA -- Checks Evidence Emitter Address --> EE
+    UA -- Allows Minting --> NFT
+
+    FTSO_Reader -- Reads Price --> FTSO
+    RL -- Uses --> RNG
 
     classDef contract fill:#f9f,stroke:#333,stroke-width:2px;
-    class UA,NFT,M,RL,RNFT,FTSO contract;
+    class EE,UA,NFT,M,RL,RNFT,FTSO_Reader contract;
 ```
 
-### Attestation Provider & FDC Integration
+## Project Structure
 
-The verification of real-world environmental actions relies on an off-chain **Attestation Provider** service (implemented in the `attestation-provider/` directory) potentially working with Flare Network's **State Connector** and **FDC (Flare Decentralized Consensus)** protocols.
+This repository uses a pnpm monorepo structure:
 
-This provider is responsible for fetching data from external sources (or processing user-provided data), validating it, and ensuring the corresponding action is recorded on the `UserActions` smart contract.
+```
+.
+├── frontend/           # Next.js dApp
+├── contracts/          # Solidity smart contracts (Foundry)
+├── attestation-provider/ # Node.js FDC Attestation Provider service
+├── package.json        # Root package file
+├── pnpm-workspace.yaml # pnpm workspace configuration
+└── README.md           # This file
+```
 
-**Verification Flows:**
+## Detailed Verification Flow (FDC + OpenAI Vision)
 
-*   **Implemented FDC Attestation Flow (Sustainable Transportation via OpenAI Vision):** For the `SUSTAINABLE_TRANSPORT_KM` action type, a verification flow using OpenAI Vision and FDC is implemented in `attestation-provider/src/server.ts`:
-    1.  **User Upload:** The user uploads a screenshot from their fitness app (e.g., Garmin Connect, Strava) via the VCOM frontend.
-    2.  **Frontend Request:** The frontend sends the user's address and the base64-encoded screenshot to the `/request-attestation` endpoint of the Attestation Provider.
-    3.  **OpenAI Vision Analysis:** The Attestation Provider (`server.ts`) sends the image to the OpenAI Vision API (`gpt-4o`) with a specialized prompt requesting analysis of the activity type (cycling, walking), distance (km), and date in a structured JSON format.
-    4.  **Validation:** The provider parses the JSON response from OpenAI and validates the data against predefined criteria (e.g., activity type is allowed, distance >= 5km).
-    5.  **FDC Request Submission:** Upon successful validation, the Attestation Provider formats the result (e.g., a simple boolean assertion that the criteria were met, or the verified distance) into an FDC Attestation Request, tailored for this action type, and submits it to the Flare Network (State Connector/FDC Hub).
-    6.  **FDC Consensus & Smart Contract Update:** The Flare Network reaches consensus on the submitted attestation. If successful, the network delivers the verified proof to the `UserActions` contract, calling `recordVerifiedAction`.
-    7.  **NFT Minting Eligibility:** The `UserActions` contract now holds a record of the verified action, making the user potentially eligible to mint a corresponding `CarbonCreditNFT`.
+The verification of the "Sustainable Transport" action relies on a dual-attestation FDC process orchestrated by the Attestation Provider and finalized by the `UserActions` contract.
 
-*Note: This implemented flow bypasses the FDC/State Connector for the transport verification step, relying on the Attestation Provider's off-chain logic and trust.* 
+### Flow Steps
 
-**Sustainable Transportation Verification Flow (Implemented - Mermaid):**
+1.  **User Upload & Initial Validation:** The user uploads a fitness app screenshot via the frontend. The Attestation Provider (`attestation-provider/src/server.ts`) receives this, validates it using OpenAI Vision (checking for activity type like cycling/walking and distance >= 5km), and generates a unique `validationId`.
+2.  **Emit Evidence Event:** The provider calls `emitEvidence` on the deployed **`EvidenceEmitter.sol`** contract. This transaction emits the `ValidationEvidence` event containing the `validationId` and validated details (user, distance, activity, timestamp). The hash of this transaction (`emitTxHash`) is recorded.
+3.  **Submit JsonApi FDC Request:** The provider prepares and submits a `JsonApi` FDC request to the Flare FDC Hub. The `requestBody` references the provider's own API endpoint (`/api/v1/validation-result/{validationId}`) which serves the validated data (status, userAddress, distanceKm, etc.) associated with the `validationId`. It also includes the expected ABI signature for this data.
+4.  **Submit EVMTransaction FDC Request:** The provider prepares and submits an `EVMTransaction` FDC request to the Flare FDC Hub, referencing the **`emitTxHash`** recorded in step 2. This request asks the FDC to verify the transaction's inclusion and retrieve the emitted `ValidationEvidence` event data.
+5.  **Store FDC Request Info:** The provider stores the `validationId`, the corresponding FDC `roundId`s, and the `requestBytes` for both the JsonApi and EVMTransaction requests locally.
+6.  **Wait for FDC:** Time must pass (typically a few minutes) for the Flare network to reach consensus on the attestations for the submitted rounds.
+7.  **Fetch Proofs (Frontend):** After waiting (triggered by user action or polling), the frontend queries the Flare **DA Layer** API (`/api/v1/fdc/proof-by-request-round-raw`) using the stored `roundId` and `requestBytes` for *both* the JsonApi and EVMTransaction requests associated with the `validationId`.
+8.  **Submit Proofs to Contract (Frontend):** The frontend calls:
+    *   `processJsonApiProof(proof)` on `UserActions.sol` with the retrieved JsonApi proof.
+    *   `processEvmProof(proof)` on `UserActions.sol` with the retrieved EVMTransaction proof.
+9.  **Contract Verification & State Update:**
+    *   `processJsonApiProof` verifies the FDC proof using Flare's on-chain libraries and decodes the `OffChainValidationResult` struct from the proof data.
+    *   `processEvmProof` verifies the FDC proof, decodes the `ValidationEvidence` event, and crucially ensures this event was emitted by the correct `EvidenceEmitter` contract address configured in `UserActions`.
+    *   Both functions update the internal `validationStages` mapping for the `validationId`. If a proof arrives and the other has already been processed, the stage transitions to `BothVerified`.
+10. **Action Recorded:** Once *both* proofs are successfully processed for the same `validationId`, the stage becomes `BothVerified`, the internal `_recordAction` function is called (updating `lastActionTimestamp`), and an `ActionRecorded` event is emitted.
+11. **NFT Minting Eligibility:** The user is now eligible to mint the `CarbonCreditNFT`, as `isActionVerified` on the NFT contract will return `true` when checking the `lastActionTimestamp` in `UserActions`.
+
+### Sequence Diagram
+
 ```mermaid
 sequenceDiagram
     participant User
     participant Frontend
     participant AttProvider as Attestation Provider (server.ts)
     participant OpenAI as OpenAI Vision API
-    participant FlareNet as Flare Network (FDC/SC)
+    participant EvidenceEmitter as EvidenceEmitter Contract
     participant UserActions as UserActions Contract
-    participant CarbonNFT as CarbonCreditNFT Contract
+    participant FDC_Hub as Flare FDC Hub
+    participant DA_Layer as Flare DA Layer
 
     User->>+Frontend: Initiate 'Sustainable Trip' Verification (upload screenshot)
     Frontend->>+AttProvider: POST /request-attestation (user, type, base64Image)
     AttProvider->>+OpenAI: Analyze Fitness Screenshot
     OpenAI-->>-AttProvider: Analysis Results (JSON: activity, distance, date)
-    AttProvider->>AttProvider: Validate Results (activity type, distance threshold)
+    AttProvider->>AttProvider: Validate Results & Generate validationId
     alt Validation Success
-        AttProvider->>+FlareNet: Submit FDC Attestation Proof (asserting validation success)
-        FlareNet->>FlareNet: FDC Consensus
-        FlareNet->>+UserActions: Call recordVerifiedAction(user, ACTION_TYPE_TRANSPORT_B32, now, proofData{...})
-        UserActions-->>-AttProvider: Action Recorded (via Event or direct call confirmation - TBC)
-        AttProvider-->>-Frontend: Verification Success (May wait for FDC confirmation or respond earlier)
-        Frontend-->>-User: Action Verified!
-        User->>+Frontend: Request to Claim/Mint NFT
-        Frontend->>+CarbonNFT: Call safeMintForAction(user, ACTION_TYPE_TRANSPORT_B32)
-        CarbonNFT->>+UserActions: Check isActionVerified(user, ACTION_TYPE_TRANSPORT_B32)
-        UserActions-->>-CarbonNFT: Verified (true)
-        CarbonNFT->>CarbonNFT: Mint NFT
-        CarbonNFT-->>-Frontend: Mint Success (Tx Hash)
-        Frontend-->>-User: NFT Minted!
+        AttProvider->>+EvidenceEmitter: Call emitEvidence(...) tx
+        EvidenceEmitter-->>-AttProvider: Tx Confirmation (emitTxHash)
+
+        AttProvider->>+FDC_Hub: Submit JsonApi FDC Request (using validationId, provider endpoint)
+        FDC_Hub-->>-AttProvider: Tx Confirmation (JsonRoundId, JsonRequestBytes)
+
+        AttProvider->>+FDC_Hub: Submit EVMTransaction FDC Request (using emitTxHash)
+        FDC_Hub-->>-AttProvider: Tx Confirmation (EvmRoundId, EvmRequestBytes)
+
+        AttProvider->>AttProvider: Store (validationId, JsonRoundId, JsonBytes, EvmRoundId, EvmBytes)
+        AttProvider-->>-Frontend: Verification Initiated (validationId)
+
+        Note over Frontend, DA_Layer: Wait for FDC Rounds to finalize (~2-5 mins)...
+
+        Frontend->>+DA_Layer: Fetch Json Proof (JsonRoundId, JsonBytes)
+        DA_Layer-->>-Frontend: JsonApiProofData
+
+        Frontend->>+DA_Layer: Fetch EVM Proof (EvmRoundId, EvmBytes)
+        DA_Layer-->>-Frontend: EvmProofData
+
+        Frontend->>+UserActions: Call processJsonApiProof(JsonApiProofData)
+        UserActions->>UserActions: Verify FDC Proof, Decode Result, Update Stage (-> JsonApiVerified or BothVerified)
+        UserActions-->>-Frontend: Tx Success/Failure
+
+        Frontend->>+UserActions: Call processEvmProof(EvmProofData)
+        UserActions->>UserActions: Verify FDC Proof, Decode Event, Check Emitter Addr, Update Stage (-> EvmVerified or BothVerified)
+        alt Both Proofs Processed Successfully
+            UserActions->>UserActions: _recordAction(), emit ActionRecorded
+        end
+        UserActions-->>-Frontend: Tx Success/Failure
+
+        Frontend-->>-User: Verification Complete (or Error)
+        Note over User, Frontend: User can now attempt to mint CarbonCreditNFT
     else Validation Failure
         AttProvider-->>-Frontend: Verification Failed (Error details)
         Frontend-->>-User: Action Could Not Be Verified
     end
 ```
 
-## Project Structure
+## Subsystems
 
-```
-contracts/
-├── src/                # Core contract source files (.sol)
-│   ├── CarbonCreditNFT.sol
-│   ├── Marketplace.sol
-│   ├── RetirementLogic.sol
-│   ├── RewardNFT.sol
-│   ├── UserActions.sol
-│   └── FTSOReader.sol
-├── script/             # Deployment scripts (.s.sol)
-│   └── DeployVCOM.s.sol
-├── test/               # Test files (.t.sol)
-│   └── ... (Your test files)
-├── lib/                # Dependencies (e.g., forge-std, openzeppelin, flare-periphery)
-├── foundry.toml        # Foundry configuration file
-├── remappings.txt      # Solidity import remappings
-└── README.md           # This file
-```
+### Contracts Subsystem
 
-## Getting Started
+*   **Location:** `contracts/`
+*   **Description:** Contains all Solidity smart contracts built with Foundry. Defines the core logic for NFTs, the marketplace, FDC verification handling (`UserActions`), event emission (`EvidenceEmitter`), FTSO reading, and retirement logic.
+*   **Details:** See `contracts/README.md` for detailed contract descriptions, setup, and usage specific to the contracts.
+
+### Frontend Subsystem
+
+*   **Location:** `frontend/`
+*   **Description:** The Next.js user interface. Allows users to connect wallets, view NFTs and marketplace listings, initiate the verification process (uploading screenshots), trigger proof submission, and interact with contract functions (list, buy, retire).
+*   **Details:** (Add link to `frontend/README.md` if it exists)
+
+### Attestation Provider Subsystem
+
+*   **Location:** `attestation-provider/`
+*   **Description:** A Node.js/Express backend service responsible for the off-chain parts of the verification flow. It handles image analysis via OpenAI, emits evidence events, submits FDC requests, and provides an API endpoint for the JsonApi FDC request.
+*   **Details:** (Add link to `attestation-provider/README.md` if it exists)
+
+## Getting Started / Setup
 
 ### Prerequisites
 
-*   **Foundry:** You need Foundry installed to compile, test, and deploy the contracts. Follow the installation guide: [https://book.getfoundry.sh/getting-started/installation](https://book.getfoundry.sh/getting-started/installation)
-*   **Git:** Required for cloning and managing dependencies.
-*   **Environment Variables:** A `.env` file in the `contracts` directory is required for deployment, containing your Coston2 private key:
-    ```.env
-    PRIVATE_KEY=0xYOUR_PRIVATE_KEY_HERE
-    # RPC_URL_COSTON2=https://coston2-api.flare.network/ext/C/rpc # Optional: Can be set here or passed via CLI
-    ```
+*   **Node.js:** v18 or later recommended.
+*   **pnpm:** For managing packages in the monorepo. Install via `npm install -g pnpm`.
+*   **Foundry:** Required for contract development. Follow installation guide: [https://book.getfoundry.sh/getting-started/installation](https://book.getfoundry.sh/getting-started/installation)
+*   **Git:** For cloning the repository.
+*   **Flare Account:** A wallet address with Coston2 C2FLR test tokens for deployment and interaction.
+*   **API Keys:**
+    *   OpenAI API Key
+    *   Flare FDC API Key (for submitting attestations and querying DA Layer)
+    *   Flare JQ Verifier API Key (used by `prepareRequest` for JsonApi)
 
 ### Installation
 
-1.  **Clone the repository (if you haven't already):**
+1.  **Clone the Repository:**
     ```bash
     git clone <your-repo-url>
-    cd <your-repo-url>/contracts
+    cd VCOM # Navigate to the project root
     ```
-2.  **Install/Update Dependencies:** Foundry manages dependencies. Ensure they are downloaded:
+2.  **Install Dependencies:** Use pnpm to install dependencies for all workspaces (frontend, contracts, attestation-provider).
     ```bash
-    forge install # Or forge update
+    pnpm install
     ```
-
-## Usage
-
-### Configuration
-
-*   Ensure your `.env` file is set up with your `PRIVATE_KEY`.
-*   Verify contract addresses used in `script/DeployVCOM.s.sol` if interacting with existing Flare system contracts.
-
-### Compile
-
-Compile the smart contracts:
-
-```bash
-forge build
-```
-
-### Test
-
-Run the test suite:
-
-```bash
-forge test
-```
-Add `-vvv` for more verbose test output.
-
-### Deploy
-
-Deploy the contracts to Coston2 testnet using the deployment script:
-
-1.  **Ensure your wallet has sufficient C2FLR test tokens.**
-2.  **Run the deployment script:**
-
+3.  **Install Contract Libraries:** Navigate to the contracts directory and install Solidity libraries.
     ```bash
-    # Make sure you are in the contracts directory
-    # Load environment variables from .env before running (or ensure your shell does)
-    source .env
-
-    # Run the script
-    forge script script/DeployVCOM.s.sol:DeployVCOM --rpc-url coston2 --broadcast --verify \
-    --verifier blockscout \
-    --verifier-url https://coston2-explorer.flare.network/api/
+    cd contracts
+    forge install
+    cd .. # Return to root
     ```
-    *   Replace the `--rpc-url` if you use a different Coston2 endpoint.
-    *   The `--broadcast` flag sends the transactions.
-    *   The `--verify` flag attempts to automatically verify the contracts on the block explorer using the specified `--verifier-url`. You might need an API key for the explorer depending on its configuration.
 
-3.  **Note the Deployed Addresses:** The script will output the addresses of the deployed contracts. You will need these for the frontend configuration.
+### Environment Configuration
+
+You need to create `.env` files in several directories:
+
+1.  **`contracts/.env`:** For deployment.
+    ```dotenv
+    PRIVATE_KEY=0xYOUR_DEPLOYER_PRIVATE_KEY_HERE
+    COSTON2_RPC_URL=https://coston2-api.flare.network/ext/C/rpc # Or your preferred RPC
+    # Optional: BLOCKSCOUT_API_KEY=YOUR_COSTON2_EXPLORER_API_KEY # For verification if needed
+    ```
+
+2.  **`attestation-provider/.env`:** For running the provider service.
+    ```dotenv
+    PROVIDER_PRIVATE_KEY=0xYOUR_PROVIDER_WALLET_PRIVATE_KEY_HERE # Wallet for emitting evidence & submitting FDC txs
+    COSTON2_RPC_URL=https://coston2-api.flare.network/ext/C/rpc
+    OPENWEATHERMAP_API_KEY=DUMMY_VALUE # Replace if using weather action
+    FDC_VERIFIER_BASE_URL=https://fdc-verifiers-testnet.flare.network
+    FDC_HUB_ADDRESS=0x856bA450C63A39574E4F18A84054F5e9F50C3488 # Coston2 FDC Hub
+    FDC_API_KEY=YOUR_FLARE_FDC_API_KEY_HERE
+    JQ_VERIFIER_API_KEY=YOUR_FLARE_JQ_VERIFIER_API_KEY_HERE # Often same as FDC key
+    USER_ACTIONS_ADDRESS=DEPLOYED_USER_ACTIONS_CONTRACT_ADDRESS_HERE # Fill after deployment
+    EVIDENCE_EMITTER_ADDRESS=DEPLOYED_EVIDENCE_EMITTER_CONTRACT_ADDRESS_HERE # Fill after deployment
+    OPENAI_API_KEY=YOUR_OPENAI_API_KEY_HERE
+    PROVIDER_PUBLIC_BASE_URL=http://localhost:3001 # Or your deployed provider URL
+    DA_LAYER_BASE_URL=https://coston2-dalayer.flare.network
+    PROVIDER_PORT=3001 # Optional: Default is 3001
+    FLARE_SYSTEMS_MANAGER_ADDRESS=0x856bA450C63A39574E4F18A84054F5e9F50C3488 # Coston2 SystemsManager
+    FDC_FEE_CONFIG_ADDRESS=0x326E5D445F026F9FB57F6037071196E6B186B1a5 # Coston2 FdcFeeConfiguration
+    ```
+
+3.  **`frontend/.env.local`:** For the Next.js app.
+    ```dotenv
+    # Required by Next.js / wagmi - can be any valid URL
+    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=YOUR_WALLETCONNECT_PROJECT_ID_HERE # Get from https://cloud.walletconnect.com/
+
+    # Attestation Provider URL
+    NEXT_PUBLIC_ATTESTATION_PROVIDER_URL=http://localhost:3001 # Or your deployed provider URL
+    ```
+
+## Running the Project
+
+Run each component in separate terminals from the **project root directory**.
+
+### Contracts
+
+1.  **Compile:**
+    ```bash
+    cd contracts
+    forge build
+    cd ..
+    ```
+2.  **Test:**
+    ```bash
+    cd contracts
+    forge test
+    cd ..
+    ```
+3.  **Deploy (See Deployment section below first)**
+
+### Attestation Provider
+
+1.  Ensure `attestation-provider/.env` is configured with deployed contract addresses (`UserActions`, `EvidenceEmitter`) and API keys.
+2.  Start the provider:
+    ```bash
+    pnpm --filter attestation-provider dev # For development with hot-reloading
+    # OR
+    pnpm --filter attestation-provider build
+    pnpm --filter attestation-provider start # For production build
+    ```
+    The provider will run on `http://localhost:3001` (or the port specified in `.env`).
+
+### Frontend
+
+1.  Ensure `frontend/.env.local` is configured with deployed contract addresses and the Attestation Provider URL.
+2.  Start the frontend development server:
+    ```bash
+    pnpm --filter frontend dev
+    ```
+    The frontend will be available at `http://localhost:3000`.
+
+## Deployment
+
+1.  **Deploy Contracts:**
+    *   Make sure `contracts/.env` has your `PRIVATE_KEY`.
+    *   Update `contracts/script/DeployVCOM.s.sol` to deploy `EvidenceEmitter` and pass its address to the `UserActions` constructor.
+    *   Run the deploy script from the `contracts` directory:
+        ```bash
+        cd contracts
+        source .env # Load private key
+        forge script script/DeployVCOM.s.sol:DeployVCOM --rpc-url coston2 --broadcast --verify --verifier blockscout --verifier-url https://coston2-explorer.flare.network/api/
+        cd ..
+        ```
+    *   Note the deployed addresses.
+2.  **Update `.env` Files:** Fill in the deployed contract addresses in `attestation-provider/.env` and `frontend/.env.local`.
+3.  **Deploy Attestation Provider:** Deploy the `attestation-provider` service to a cloud platform (e.g., Google Cloud Run, AWS Lambda, Heroku, Render). Ensure the environment variables are set correctly in the deployment environment. Update `PROVIDER_PUBLIC_BASE_URL` in its `.env` and `NEXT_PUBLIC_ATTESTATION_PROVIDER_URL` in `frontend/.env.local` to the deployed URL.
+4.  **Deploy Frontend:** Deploy the `frontend` Next.js application to a platform like Vercel or Netlify. Ensure the environment variables (contract addresses, provider URL) are configured in the deployment settings.
+
+## Flare Development Experience Notes
+
+*   **FDC Complexity:** The dual-attestation flow, while powerful, adds significant complexity involving off-chain coordination, multiple FDC requests, proof fetching from the DA layer, and on-chain proof submission/verification. Careful state management in both the provider and the contract (`UserActions`) is crucial.
+*   **API Key Management:** Handling multiple API keys (OpenAI, FDC, JQ Verifier) securely requires careful environment configuration.
+*   **DA Layer Interaction:** Fetching proofs requires understanding the specific DA Layer API endpoints and request/response formats. Retry logic is recommended as proofs might not be immediately available.
+*   **Tooling:** Foundry provides a robust environment for contract development and testing. Viem is excellent for frontend and backend interactions. Flare's periphery contract library simplifies interaction with FTSO, RNG etc.
+*   **Documentation:** Flare documentation is comprehensive but navigating the specifics of FDC proof construction, verification interfaces, and DA layer interaction requires careful reading. Examples are very helpful.
