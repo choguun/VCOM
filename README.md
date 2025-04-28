@@ -396,6 +396,11 @@ https://coston2-explorer.flare.network/tx/0xa83ce8f314e7d165ada33d7886969f9dea4b
 claimTransportNFT transaction \
 https://coston2-explorer.flare.network/tx/0xea162661009ed4f84d4f9b81986d1d7abea719c747a965138b81e58cb00d24e6
 
+listItem NFT transaction \
+https://coston2-explorer.flare.network/tx/0x55c8f96495a3471e90162733086811fd8c77045d848d70e5a354fb3a625fc9c0
+
+buyItem NFT transaction \
+https://coston2-explorer.flare.network/tx/0xd9bd9360511da6087c0e583bf086d71e35375cb1d21130129e0fdd1a3e65a174
 
 ## Flare Development Experience Notes
 
