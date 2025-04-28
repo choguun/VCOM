@@ -58,27 +58,32 @@ The project follows a monorepo structure containing three main components:
 
 ```mermaid
 graph TD
-    subgraph User Interface
+    %% User Interface
+    subgraph UI[User Interface]
         Frontend[Next.js dApp]
     end
 
-    subgraph Off-Chain Services
-        AP[Attestation Provider (Node.js)]
+    %% Off-Chain Services
+    subgraph OffChain[Off-Chain Services]
+        AP[Attestation Provider]
         OpenAI[OpenAI Vision API]
     end
 
-    subgraph Blockchain (Coston2)
-        direction LR
-        subgraph VCOM Contracts
+    %% Blockchain (Coston2)
+    subgraph Blockchain[Blockchain - Coston2]
+        %% VCOM Contracts
+        subgraph VCOM[VCOM Contracts]
             EE[EvidenceEmitter]
             UA[UserActions]
-            NFT[(CarbonCreditNFT)]
+            NFT[CarbonCreditNFT]
             M[Marketplace]
             RL[RetirementLogic]
-            RNFT[(RewardNFT)]
+            RNFT[RewardNFT]
             FTSO_Reader[FTSOReader]
         end
-        subgraph Flare Network Systems
+        
+        %% Flare Network Systems
+        subgraph Flare[Flare Network Systems]
             FDC[FDC Hub & Verifiers]
             FTSO[FTSO System]
             RNG[RNG System]
@@ -86,28 +91,30 @@ graph TD
         end
     end
 
-    Frontend -- Interacts with --> M
-    Frontend -- Interacts with --> NFT
-    Frontend -- Interacts with --> RL
-    Frontend -- Interacts with --> RNFT
-    Frontend -- Reads Price --> FTSO_Reader
-    Frontend -- Triggers Verification --> AP
-    Frontend -- Submits FDC Proofs --> UA
+    %% Connections
+    Frontend --> M
+    Frontend --> NFT
+    Frontend --> RL
+    Frontend --> RNFT
+    Frontend --> FTSO_Reader
+    Frontend --> AP
+    Frontend --> UA
 
-    AP -- Analyzes Image --> OpenAI
-    AP -- Calls emitEvidence --> EE
-    AP -- Submits FDC Requests --> FDC
-    AP -- Serves Validation Data --> FDC %% Via JsonApi URL
+    AP --> OpenAI
+    AP --> EE
+    AP --> FDC
+    AP -.-> FDC
 
-    FDC -- Verifies & Stores Attestations --> DA
+    FDC --> DA
 
-    UA -- Verifies FDC Proofs against --> DA
-    UA -- Checks Evidence Emitter Address --> EE
-    UA -- Allows Minting --> NFT
+    UA --> DA
+    UA --> EE
+    UA --> NFT
 
-    FTSO_Reader -- Reads Price --> FTSO
-    RL -- Uses --> RNG
+    FTSO_Reader --> FTSO
+    RL --> RNG
 
+    %% Styling
     classDef contract fill:#f9f,stroke:#333,stroke-width:2px;
     class EE,UA,NFT,M,RL,RNFT,FTSO_Reader contract;
 ```
