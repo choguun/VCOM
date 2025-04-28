@@ -1047,3 +1047,4 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 app.listen(port, () => {
     console.log(`Attestation Provider listening on port ${port}`);
 });
+ 
