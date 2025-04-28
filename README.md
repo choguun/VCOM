@@ -367,7 +367,7 @@ Run each component in separate terminals from the **project root directory**.
 3.  **Deploy Attestation Provider:** Deploy the `attestation-provider` service to a cloud platform (e.g., Google Cloud Run, AWS Lambda, Heroku, Render). Ensure the environment variables are set correctly in the deployment environment. Update `PROVIDER_PUBLIC_BASE_URL` in its `.env` and `NEXT_PUBLIC_ATTESTATION_PROVIDER_URL` in `frontend/.env.local` to the deployed URL.
 4.  **Deploy Frontend:** Deploy the `frontend` Next.js application to a platform like Vercel or Netlify. Ensure the environment variables (contract addresses, provider URL) are configured in the deployment settings.
 
-## Images of Demo
+## Demo
 
 ![alt text](ss1.png)
 - verify sustain transportation with FDC(OpenAI Vision API + EVM(Flare))
