@@ -86,7 +86,8 @@ const EXPECTED_ACTION_TYPE_TRANSPORT = "SUSTAINABLE_TRANSPORT_KM";
 const FDC_ATTESTATION_TYPE_JSONAPI_B32 = keccak256(toHex("IJsonApi")); 
 const FDC_ATTESTATION_TYPE_EVM_B32 = keccak256(toHex("EVMTransaction")); 
 const FDC_SOURCE_ID_WEB2_B32 = keccak256(toHex("WEB2")); 
-const FDC_SOURCE_ID_COSTON2_B32 = keccak256(toHex(evmSourceNameCoston2));
+const FDC_SOURCE_ID_TESTFLR_B32 = keccak256(toHex("testFLR"));
+const FDC_SOURCE_ID_COSTON2_B32 = keccak256(toHex("testFLR"));
 
 const FDC_FEE_CONFIG_ABI: Abi = [{"inputs":[{"internalType":"contract IGovernanceSettings","name":"_governanceSettings","type":"address"},{"internalType":"address","name":"_initialGovernance","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"allowedAfterTimestamp","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"encodedCall","type":"bytes"}],"name":"GovernanceCallTimelocked","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"initialGovernance","type":"address"}],"name":"GovernanceInitialised","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"governanceSettings","type":"address"}],"name":"GovernedProductionModeEntered","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TimelockedGovernanceCallCanceled","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes4","name":"selector","type":"bytes4"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TimelockedGovernanceCallExecuted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"attestationType","type":"bytes32"},{"indexed":true,"internalType":"bytes32","name":"source","type":"bytes32"}],"name":"TypeAndSourceFeeRemoved","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"attestationType","type":"bytes32"},{"indexed":true,"internalType":"bytes32","name":"source","type":"bytes32"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"}],"name":"TypeAndSourceFeeSet","type":"event"},{"inputs":[{"internalType":"bytes4","name":"_selector","type":"bytes4"}],"name":"cancelGovernanceCall","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"_selector","type":"bytes4"}],"name":"executeGovernanceCall","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes","name":"_data","type":"bytes"}],"name":"getRequestFee","outputs":[{"internalType":"uint256","name":"_fee","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"governance","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"governanceSettings","outputs":[{"internalType":"contract IGovernanceSettings","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"contract IGovernanceSettings","name":"_governanceSettings","type":"address"},{"internalType":"address","name":"_initialGovernance","type":"address"}],"name":"initialise","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_address","type":"address"}],"name":"isExecutor","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"productionMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"_type","type":"bytes32"},{"internalType":"bytes32","name":"_source","type":"bytes32"}],"name":"removeTypeAndSourceFee","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32[]","name":"_types","type":"bytes32[]"},{"internalType":"bytes32[]","name":"_sources","type":"bytes32[]"}],"name":"removeTypeAndSourceFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32","name":"_type","type":"bytes32"},{"internalType":"bytes32","name":"_source","type":"bytes32"},{"internalType":"uint256","name":"_fee","type":"uint256"}],"name":"setTypeAndSourceFee","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32[]","name":"_types","type":"bytes32[]"},{"internalType":"bytes32[]","name":"_sources","type":"bytes32[]"},{"internalType":"uint256[]","name":"_fees","type":"uint256[]"}],"name":"setTypeAndSourceFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"switchToProductionMode","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"selector","type":"bytes4"}],"name":"timelockedCalls","outputs":[{"internalType":"uint256","name":"allowedAfterTimestamp","type":"uint256"},{"internalType":"bytes","name":"encodedCall","type":"bytes"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"typeAndSource","type":"bytes32"}],"name":"typeAndSourceFees","outputs":[{"internalType":"uint256","name":"fee","type":"uint256"}],"stateMutability":"view","type":"function"}]; // MISSING_ABI
 
@@ -130,7 +131,72 @@ export const USER_ACTIONS_ABI: Abi = [
     { type: "function", name: "isActionVerified", inputs: [{ name: "user", type: "address", internalType: "address" }, { name: "actionType", type: "bytes32", internalType: "bytes32" }, { name: "requiredTimestamp", type: "uint256", internalType: "uint256" }], outputs: [{ name: "", type: "bool", internalType: "bool" }], stateMutability: "view" },
     { type: "function", name: "lastActionTimestamp", inputs: [{ name: "", type: "address", internalType: "address" }, { name: "", type: "bytes32", internalType: "bytes32" }], outputs: [{ name: "", type: "uint256", internalType: "uint256" }], stateMutability: "view" },
     { type: "function", name: "owner", inputs: [], outputs: [{ name: "", type: "address", internalType: "address" }], stateMutability: "view" },
-    { type: "function", name: "processEvmProof", inputs: [{ name: "proofBytes", type: "bytes", internalType: "bytes" }], outputs: [], stateMutability: "nonpayable" },
+    { 
+        type: "function", 
+        name: "processEvmProof", 
+        inputs: [
+          { 
+            name: "_proof", 
+            type: "tuple", 
+            internalType: "struct IEVMTransaction.Proof", 
+            components: [
+              { name: "merkleProof", type: "bytes32[]", internalType: "bytes32[]" },
+              { 
+                name: "data", 
+                type: "tuple", 
+                internalType: "struct IEVMTransaction.Response", 
+                components: [
+                  { name: "attestationType", type: "bytes32", internalType: "bytes32" },
+                  { name: "sourceId", type: "bytes32", internalType: "bytes32" },
+                  { name: "votingRound", type: "uint64", internalType: "uint64" },
+                  { name: "lowestUsedTimestamp", type: "uint64", internalType: "uint64" },
+                  { 
+                    name: "requestBody", 
+                    type: "tuple", 
+                    internalType: "struct IEVMTransaction.RequestBody", 
+                    components: [
+                      { name: "transactionHash", type: "bytes32", internalType: "bytes32" },
+                      { name: "requiredConfirmations", type: "uint16", internalType: "uint16" },
+                      { name: "provideInput", type: "bool", internalType: "bool" },
+                      { name: "listEvents", type: "bool", internalType: "bool" },
+                      { name: "logIndices", type: "uint32[]", internalType: "uint32[]" }
+                    ]
+                  },
+                  { 
+                    name: "responseBody", 
+                    type: "tuple", 
+                    internalType: "struct IEVMTransaction.ResponseBody", 
+                    components: [
+                      { name: "blockNumber", type: "uint64", internalType: "uint64" },
+                      { name: "timestamp", type: "uint64", internalType: "uint64" },
+                      { name: "sourceAddress", type: "address", internalType: "address" },
+                      { name: "isDeployment", type: "bool", internalType: "bool" },
+                      { name: "receivingAddress", type: "address", internalType: "address" },
+                      { name: "value", type: "uint256", internalType: "uint256" },
+                      { name: "input", type: "bytes", internalType: "bytes" },
+                      { name: "status", type: "uint8", internalType: "uint8" },
+                      { 
+                        name: "events", 
+                        type: "tuple[]", 
+                        internalType: "struct IEVMTransaction.Event[]", 
+                        components: [
+                          { name: "logIndex", type: "uint32", internalType: "uint32" },
+                          { name: "emitterAddress", type: "address", internalType: "address" },
+                          { name: "topics", type: "bytes32[]", internalType: "bytes32[]" },
+                          { name: "data", type: "bytes", internalType: "bytes" },
+                          { name: "removed", type: "bool", internalType: "bool" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ], 
+        outputs: [], 
+        stateMutability: "nonpayable"
+    },
     { type: "function", name: "processJsonApiProof", inputs: [{ name: "_proof", type: "tuple", internalType: "struct IJsonApi.Proof", components: [{ name: "merkleProof", type: "bytes32[]", internalType: "bytes32[]" }, { name: "data", type: "tuple", internalType: "struct IJsonApi.Response", components: [{ name: "attestationType", type: "bytes32", internalType: "bytes32" }, { name: "sourceId", type: "bytes32", internalType: "bytes32" }, { name: "votingRound", type: "uint64", internalType: "uint64" }, { name: "lowestUsedTimestamp", type: "uint64", internalType: "uint64" }, { name: "requestBody", type: "tuple", internalType: "struct IJsonApi.RequestBody", components: [{ name: "url", type: "string", internalType: "string" }, { name: "postprocessJq", type: "string", internalType: "string" }, { name: "abi_signature", type: "string", internalType: "string" }] }, { name: "responseBody", type: "tuple", internalType: "struct IJsonApi.ResponseBody", components: [{ name: "abi_encoded_data", type: "bytes", internalType: "bytes" }] }] }] }], outputs: [], stateMutability: "nonpayable" },
     { type: "function", name: "recordVerifiedAction", inputs: [{ name: "user", type: "address", internalType: "address" }, { name: "actionType", type: "bytes32", internalType: "bytes32" }, { name: "timestamp", type: "uint256", internalType: "uint256" }, { name: "proofData", type: "bytes", internalType: "bytes" }], outputs: [], stateMutability: "nonpayable" },
     { type: "function", name: "renounceOwnership", inputs: [], outputs: [], stateMutability: "nonpayable" },
@@ -140,14 +206,7 @@ export const USER_ACTIONS_ABI: Abi = [
     { type: "event", name: "ActionRecorded", inputs: [{ name: "user", type: "address", indexed: true, internalType: "address" }, { name: "actionType", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "timestamp", type: "uint256", indexed: false, internalType: "uint256" }, { name: "proofData", type: "bytes", indexed: false, internalType: "bytes" }], anonymous: false },
     { type: "event", name: "AttestationVerifierSet", inputs: [{ name: "newVerifier", type: "address", indexed: true, internalType: "address" }], anonymous: false },
     { type: "event", name: "EvmProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false },
-    { type: "event", name: "JsonApiProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeActivityCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "activity", type: "string", indexed: false, internalType: "string" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeDecodeResult", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeDistanceCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "distance", type: "uint256", indexed: false, internalType: "uint256" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeStageUpdate", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "currentStage", type: "uint8", indexed: false, internalType: "enum UserActions.ValidationStage" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeStatusCheck", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }, { name: "status", type: "string", indexed: false, internalType: "string" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeVerify", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false },
-    { type: "event", name: "DebugJsonProof_BeforeVerifyCall", inputs: [{ name: "validationId", type: "bytes32", indexed: false, internalType: "bytes32" }], anonymous: false }
+    { type: "event", name: "JsonApiProofProcessed", inputs: [{ name: "validationId", type: "bytes32", indexed: true, internalType: "bytes32" }, { name: "userAddress", type: "address", indexed: true, internalType: "address" }], anonymous: false }
 ] as const;
 
 // --- Interfaces & Storage ---
@@ -184,7 +243,7 @@ interface IJsonApiProof {
 
 interface IEVMTransactionRequestBody {
     transactionHash: Hex; // bytes32
-    requiredConfirmations: number; // uint16
+    requiredConfirmations: string; // <-- Changed back to string to match FDC Verifier API
     provideInput: boolean;
     listEvents: boolean;
     logIndices: number[]; // uint32[]
@@ -240,6 +299,7 @@ interface ValidationRecord {
     evmRoundId?: number;
     evmRequestBytes?: Hex;
     evmRequestId?: Hex; // Added
+    evmRequestBody?: IEVMTransactionRequestBody; // <-- Add this line
     evidenceTxHash?: Hex;
     jsonApiProofTxHash?: Hex;
     evmProofTxHash?: Hex;
@@ -435,43 +495,52 @@ async function prepareFdcRequest(attestationTypeName: string, sourceIdName: stri
 async function submitFdcRequest(abiEncodedRequest: Hex): Promise<{ txHash: Hex | null, roundId: number | null }> {
     console.log("Submitting FDC request on-chain...");
     try {
-        // 1. Get Fee (Ensure FDC_FEE_CONFIG_ABI is populated)
+        // 1. Get Fee
+        console.log(`[submitFdcRequest] Reading fee for request: ${abiEncodedRequest.substring(0, 66)}...`);
         if (FDC_FEE_CONFIG_ABI.length === 0) throw new Error("FDC_FEE_CONFIG_ABI is not defined");
         const requestFee = await walletClient.readContract({
-            address: fdcFeeConfigAddress as Address, // Explicitly cast to Address
+            address: fdcFeeConfigAddress as Address, 
             abi: FDC_FEE_CONFIG_ABI, 
-            functionName: 'getRequestFee', // Assuming this function name
+            functionName: 'getRequestFee',
             args: [abiEncodedRequest]
-        }) as bigint; // Cast to bigint
-        console.log(`Calculated FDC request fee: ${requestFee}`);
+        }) as bigint;
+        console.log(`[submitFdcRequest] Calculated FDC request fee: ${requestFee}`);
 
         // 2. Submit Request
+        console.log(`[submitFdcRequest] Submitting requestAttestation tx to FDC Hub (${fdcHubAddress}) with value ${requestFee}...`);
         const txHash = await walletClient.writeContract({
             address: fdcHubAddress!,
             abi: FDC_HUB_ABI,
             functionName: 'requestAttestation',
             args: [abiEncodedRequest],
-            value: requestFee // Attach fee as value
+            value: requestFee
         });
-        console.log(`FDC request submitted, txHash: ${txHash}`);
-        // Wait for tx confirmation (important for getting the correct round ID)
-        await walletClient.waitForTransactionReceipt({ hash: txHash });
-        console.log(`FDC request transaction confirmed: ${txHash}`);
+        console.log(`[submitFdcRequest] FDC request submitted, txHash: ${txHash}`);
 
-        // 3. Get Round ID (Ensure FLARE_SYSTEMS_MANAGER_ABI is populated)
+        // Wait for tx confirmation
+        console.log(`[submitFdcRequest] Waiting for transaction receipt for ${txHash}...`);
+        await walletClient.waitForTransactionReceipt({ hash: txHash });
+        console.log(`[submitFdcRequest] FDC request transaction confirmed: ${txHash}`);
+
+        // 3. Get Round ID
+        console.log(`[submitFdcRequest] Reading current voting round ID from Systems Manager (${flareSystemsManagerAddress})...`);
         if (FLARE_SYSTEMS_MANAGER_ABI.length === 0) throw new Error("FLARE_SYSTEMS_MANAGER_ABI is not defined");
         const roundId = await walletClient.readContract({
-            address: flareSystemsManagerAddress as Address, // Explicitly cast to Address
+            address: flareSystemsManagerAddress as Address, 
             abi: FLARE_SYSTEMS_MANAGER_ABI, 
-            functionName: 'getCurrentVotingEpochId', // Assuming this function name
+            functionName: 'getCurrentVotingEpochId',
             args: []
-        }) as number; // Cast to number
-        console.log(`Attestation requested in voting round: ${roundId}`);
+        }) as number;
+        console.log(`[submitFdcRequest] Attestation requested in voting round: ${roundId}`);
 
         return { txHash, roundId };
 
-    } catch (error) {
-        console.error("Error submitting FDC request on-chain:", error);
+    } catch (error: any) {
+        console.error("[submitFdcRequest] Error submitting FDC request on-chain:", error.shortMessage || error.message || error);
+        // Log specific details if available (e.g., from Viem errors)
+        if (error.cause) {
+            console.error("[submitFdcRequest] Error Cause:", error.cause);
+        }
         return { txHash: null, roundId: null };
     }
 }
@@ -560,74 +629,6 @@ async function getProofFromDALayer(roundId: number, requestBytes: Hex): Promise<
     }
 
     console.error(`Failed to retrieve proof from DA Layer for round ${roundId} after ${maxRetries} attempts.`);
-    return null; // Return null after all retries fail
-}
-
-// New helper to query DA Layer for proof BY REQUEST ID
-async function getProofFromDALayerById(roundId: number, requestId: Hex): Promise<DALayerProofResponseData | null> {
-    console.log(`Querying DA Layer for proof for round ${roundId}, request ID ${requestId}...`);
-    const url = `${daLayerBaseUrl}/api/v1/fdc/proof-by-id`; // Use proof-by-id endpoint
-    const payload = {
-        roundId: roundId, // API expects number for this endpoint
-        requestId: requestId
-    };
-    
-    const maxRetries = 3;
-    const retryDelayMs = 10000; // 10 seconds
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        console.log(`Calling DA Layer URL: ${url} (Attempt ${attempt}/${maxRetries})`);
-        console.log("DA Layer Payload:", JSON.stringify(payload));
-
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-KEY': fdcApiKey! // Assuming same API key for DA Layer
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.warn(`DA Layer API (by ID) error (${response.status}) at ${url} on attempt ${attempt}: ${errorText}`);
-                if (response.status === 400) return null; // Don't retry on Bad Request
-                // Otherwise, wait and retry
-            } else {
-                const data: any = await response.json(); // Use 'any' type
-
-                // Check if the response directly contains the proof data
-                if (!data || !data.proof || data.proof.length === 0 || !data.response_hex) {
-                    console.warn(`DA Layer API (by ID) did not return expected proof data fields on attempt ${attempt}:`, data);
-                    // Wait and retry
-                } else {
-                    console.log(`Successfully retrieved proof data from DA Layer (by ID) for round ${roundId} on attempt ${attempt}`);
-                    // Construct the expected return structure
-                    return {
-                        merkleProof: data.proof,
-                        responseHex: data.response_hex,
-                        attestationType: data.attestation_type || null,
-                        sourceId: data.source_id || null,
-                        votingRound: data.voting_round || null, // API might return string or number
-                        lowestUsedTimestamp: data.lowest_used_timestamp || null // API might return string or number
-                    };
-                }
-            }
-
-        } catch (error) {
-            console.error(`Error calling DA Layer API (by ID) (${url}) on attempt ${attempt}:`, error);
-            // Wait and retry on network errors
-        }
-
-        // If not successful and more retries left, wait before the next attempt
-        if (attempt < maxRetries) {
-            console.log(`Waiting ${retryDelayMs / 1000} seconds before next DA Layer (by ID) attempt...`);
-            await delay(retryDelayMs);
-        }
-    }
-
-    console.error(`Failed to retrieve proof from DA Layer (by ID) for round ${roundId}, request ID ${requestId} after ${maxRetries} attempts.`);
     return null; // Return null after all retries fail
 }
 
@@ -762,15 +763,18 @@ app.post('/request-attestation', asyncHandler(async (req: Request, res: Response
             // --- END DEBUG LOGGING ---
 
             // 5. Prepare EVMTransaction FDC Request
-            const evmRequestBody = {
+            const evmRequestBody: IEVMTransactionRequestBody = {
                 transactionHash: emitTxHash,
-                requiredConfirmations: "1", // API expects a string
+                requiredConfirmations: "1", // <-- Changed back to string
                 provideInput: false, // Don't need input data
                 listEvents: true,    // Need events
                 logIndices: []       // Get all events (up to limit)
             };
-            const evmEncodedRequest = await prepareFdcRequest('EVMTransaction', 'testFLR', evmRequestBody); // Use source 'testFLR' for EVMTransaction on testnet
+            const evmEncodedRequest = await prepareFdcRequest('EVMTransaction', 'testFLR', evmRequestBody);
             if (!evmEncodedRequest) throw new Error("Failed to prepare EVMTransaction FDC request");
+
+            // Store the EVM request body BEFORE submitting FDC requests
+            validationStore.get(validationId)!.evmRequestBody = evmRequestBody; // Store the object
 
             // 6. Submit Both FDC Requests On-Chain
             console.log("Submitting JsonApi request...");
@@ -833,7 +837,7 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
         return res.status(404).json({ error: 'Validation record not found' });
     }
 
-    // Check required fields, including the stored request body
+    // Check required fields, reverting to Request Bytes
     if (!record.jsonApiRoundId || !record.jsonApiRequestBytes || !record.evmRoundId || !record.evmRequestBytes || !record.jsonApiRequestBody) {
         return res.status(400).json({ error: 'FDC request details (round/request bytes/request body) missing in record, cannot retrieve proofs yet.' });
     }
@@ -853,14 +857,14 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
     let evmProofTxHash: Hex | null = null;
 
     try {
-        // 1. Fetch Proofs from DA Layer using Request Bytes
+        // 1. Fetch Proofs from DA Layer using Request Bytes (Reverted)
         console.log("Fetching JsonApi proof using Request Bytes...");
         const jsonApiProofData = await getProofFromDALayer(record.jsonApiRoundId!, record.jsonApiRequestBytes!); 
-        if (!jsonApiProofData) throw new Error("Failed to retrieve JsonApi proof from DA Layer using Request Bytes");
+        if (!jsonApiProofData) throw new Error(`Failed to retrieve JsonApi proof from DA Layer using Request Bytes`);
 
         console.log("Fetching EVM proof using Request Bytes...");
         const evmProofData = await getProofFromDALayer(record.evmRoundId!, record.evmRequestBytes!); 
-        if (!evmProofData) throw new Error("Failed to retrieve EVM proof from DA Layer using Request Bytes");
+        if (!evmProofData) throw new Error(`Failed to retrieve EVM proof from DA Layer using Request Bytes`);
 
         // --- [DEBUG] Log stored Request Body, ID --- 
         console.log(`[DEBUG /submit-proofs] Stored JsonApi Request ID: ${record.jsonApiRequestId}`);
@@ -894,11 +898,6 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
                      { type: 'bytes', name: 'abi_encoded_data' } // This holds the INNER encoded data
                 ] 
             } 
-        ];
-        // ABI for the IJsonApi.Proof struct that the UserActions contract expects
-        const jsonApiProofContractInputAbiType = [
-            { type: 'bytes32[]', name: 'merkleProof' }, 
-            { type: 'tuple', name: 'data', components: jsonApiResponseAbiType } 
         ];
 
         const evmProofAbiType = [{ type: 'bytes32[]', name: 'merkleProof' }, { type: 'tuple', name: 'data', components: [{ type: 'bytes32', name: 'attestationType' }, { type: 'bytes32', name: 'sourceId' }, { type: 'uint64', name: 'votingRound' }, { type: 'uint64', name: 'lowestUsedTimestamp' }, { type: 'tuple', name: 'requestBody', components: [{ type: 'bytes32', name: 'transactionHash' }, { type: 'uint16', name: 'requiredConfirmations' }, { type: 'bool', name: 'provideInput' }, { type: 'bool', name: 'listEvents' }, { type: 'uint32[]', name: 'logIndices' }] }, { type: 'tuple', name: 'responseBody', components: [{ type: 'uint64', name: 'blockNumber' }, { type: 'uint64', name: 'timestamp' }, { type: 'address', name: 'sourceAddress' }, { type: 'bool', name: 'isDeployment' }, { type: 'address', name: 'receivingAddress' }, { type: 'uint256', name: 'value' }, { type: 'bytes', name: 'input' }, { type: 'uint8', name: 'status' }, { type: 'tuple[]', name: 'events', components: [{ type: 'uint32', name: 'logIndex' }, { type: 'address', name: 'emitterAddress' }, { type: 'bytes32[]', name: 'topics' }, { type: 'bytes', name: 'data' }, { type: 'bool', name: 'removed' }] }] }] }];
@@ -952,6 +951,20 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
             } 
         };
 
+        // --- EVM Proof Construction ---
+        // Use the STORED evmRequestBody and the DECODED responseBody from the DA Layer
+        if (!record.evmRequestBody) {
+            throw new Error("Stored EVM request body is missing in validation record.");
+        }
+        const reconstructedEvmResponseDataForContract: IEVMTransactionResponse = {
+            attestationType: FDC_ATTESTATION_TYPE_EVM_B32, // Use constant from FDC system
+            sourceId: FDC_SOURCE_ID_COSTON2_B32, // Use correct source ID
+            votingRound: BigInt(record.evmRoundId!),   // Use stored round ID
+            lowestUsedTimestamp: lowestTimestampToUse, // Use consistent timestamp from EVM proof
+            requestBody: record.evmRequestBody, // *** Use the STORED request body ***
+            responseBody: decodedEvmResponseData.responseBody // *** Use the responseBody part of the decoded DA data ***
+        };
+
         // 4. Construct the final IJsonApi.Proof object to send to the contract
         const finalJsonApiProofForContract: IJsonApiProof = {
             merkleProof: jsonApiProofData.merkleProof, // Use Merkle proof from DA layer
@@ -961,15 +974,8 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
         // --- EVM Proof Construction (using the decoded data) --- 
         const finalEvmProofForContract: IEVMTransactionProof = {
             merkleProof: evmProofData.merkleProof,
-            // Update the lowestUsedTimestamp in the EVM proof data to match the one used in JsonApi proof for consistency?
-            // data: { ...decodedEvmResponseData, lowestUsedTimestamp: lowestTimestampToUse } // This might be needed if contract compares them
-            data: decodedEvmResponseData // Or keep as is if contract doesn't compare
+            data: reconstructedEvmResponseDataForContract // Use the correctly reconstructed response
         };
-        // Encode the EVM proof struct to send to the contract's processEvmProof function
-        const evmProofBytes = encodeAbiParameters(
-            evmProofAbiType, 
-            [finalEvmProofForContract.merkleProof, finalEvmProofForContract.data] 
-        );
 
         console.log("Proofs reconstructed successfully.");
 
@@ -998,7 +1004,7 @@ app.post('/submit-proofs/:validationId', asyncHandler(async (req: Request, res: 
             address: userActionsAddress!,
             abi: USER_ACTIONS_ABI,
             functionName: 'processEvmProof',
-            args: [evmProofBytes],
+            args: [finalEvmProofForContract], // Pass the entire struct object directly
             gas: BigInt(3000000)
         });
         console.log(`EVM proof submitted, txHash: ${evmProofTxHash}`);
