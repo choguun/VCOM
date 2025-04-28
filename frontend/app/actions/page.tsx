@@ -39,6 +39,7 @@ interface ActionStatus {
     selectedFile: File | null;
     selectedFileName: string;
     isReadingFile: boolean;
+    imagePreviewUrl: string | null;
     // --- New state for FDC flow ---
     validationId: string | null; // Store the ID received from the provider
     pollingIntervalId: NodeJS.Timeout | null; // To manage status polling
@@ -57,16 +58,16 @@ export default function ActionsPage() {
         [ACTION_TYPE_TEMP]: { 
             lastRecordedTimestamp: 0, isVerifying: false, verifyError: null, verifySuccessMessage: null, 
             isClaiming: false, claimError: null, claimSuccessTx: null, canClaim: false,
-            selectedFile: null, selectedFileName: '', isReadingFile: false, // Add file state
-            validationId: null, pollingIntervalId: null, currentStatus: null, // Add FDC state
-            backendStatus: null // Initialize backendStatus
+            selectedFile: null, selectedFileName: '', isReadingFile: false, imagePreviewUrl: null,
+            validationId: null, pollingIntervalId: null, currentStatus: null,
+            backendStatus: null
         },
         [ACTION_TYPE_TRANSPORT]: { 
             lastRecordedTimestamp: 0, isVerifying: false, verifyError: null, verifySuccessMessage: null, 
             isClaiming: false, claimError: null, claimSuccessTx: null, canClaim: false,
-            selectedFile: null, selectedFileName: '', isReadingFile: false, // Add file state
-            validationId: null, pollingIntervalId: null, currentStatus: null, // Add FDC state
-            backendStatus: null // Initialize backendStatus
+            selectedFile: null, selectedFileName: '', isReadingFile: false, imagePreviewUrl: null,
+            validationId: null, pollingIntervalId: null, currentStatus: null,
+            backendStatus: null
         },
     }));
 
@@ -415,15 +416,48 @@ export default function ActionsPage() {
     // --- File Handling Logic ---
     const handleFileChange = (actionType: string, event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (file) {
+
+        // Revoke previous URL if it exists
+        const currentPreviewUrl = actionStatuses[actionType]?.imagePreviewUrl;
+        if (currentPreviewUrl) {
+            URL.revokeObjectURL(currentPreviewUrl);
+        }
+
+        if (file && file.type.startsWith('image/')) {
+            const newPreviewUrl = URL.createObjectURL(file);
             updateActionStatus(actionType, { 
                 selectedFile: file, 
                 selectedFileName: file.name,
+                imagePreviewUrl: newPreviewUrl, // Store new URL
                 verifyError: null, 
+                verifySuccessMessage: null
+             });
+        } else {
+             // Clear if no file selected or not an image
+             updateActionStatus(actionType, { 
+                selectedFile: null, 
+                selectedFileName: '',
+                imagePreviewUrl: null,
+                verifyError: file ? "Selected file is not a valid image." : null, // Add error if invalid file type
                 verifySuccessMessage: null
              });
         }
     };
+
+    // Effect to revoke object URLs on unmount or when file changes clear it
+    useEffect(() => {
+        const transportStatus = actionStatuses[ACTION_TYPE_TRANSPORT];
+        const urlToRevoke = transportStatus?.imagePreviewUrl;
+
+        // Return a cleanup function
+        return () => {
+            if (urlToRevoke) {
+                console.log("Revoking object URL:", urlToRevoke);
+                URL.revokeObjectURL(urlToRevoke);
+            }
+        };
+        // Rerun when the imagePreviewUrl changes for the transport action
+    }, [actionStatuses[ACTION_TYPE_TRANSPORT]?.imagePreviewUrl]); 
 
     const readFileAsBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -514,6 +548,17 @@ export default function ActionsPage() {
                                 />
                                 {status.selectedFileName && <span className="text-sm text-muted-foreground truncate max-w-[150px]" title={status.selectedFileName}>{status.selectedFileName}</span>}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Image Preview */} 
+                    {actionType === ACTION_TYPE_TRANSPORT && status.imagePreviewUrl && (
+                        <div className="my-4 p-2 border rounded-md flex justify-center bg-muted/40">
+                            <img 
+                                src={status.imagePreviewUrl} 
+                                alt="Screenshot preview" 
+                                className="max-h-48 max-w-full object-contain rounded-sm"
+                            />
                         </div>
                     )}
 
