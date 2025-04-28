@@ -162,55 +162,58 @@ The verification of the "Sustainable Transport" action relies on a dual-attestat
 sequenceDiagram
     participant User
     participant Frontend
-    participant AttProvider as Attestation Provider (server.ts)
+    participant AttProvider as Attestation Provider
     participant OpenAI as OpenAI Vision API
     participant EvidenceEmitter as EvidenceEmitter Contract
     participant UserActions as UserActions Contract
     participant FDC_Hub as Flare FDC Hub
     participant DA_Layer as Flare DA Layer
 
-    User->>+Frontend: Initiate 'Sustainable Trip' Verification (upload screenshot)
-    Frontend->>+AttProvider: POST /request-attestation (user, type, base64Image)
-    AttProvider->>+OpenAI: Analyze Fitness Screenshot
-    OpenAI-->>-AttProvider: Analysis Results (JSON: activity, distance, date)
+    User->>Frontend: Initiate 'Sustainable Trip' Verification (upload screenshot)
+    Frontend->>AttProvider: POST /request-attestation (user, type, base64Image)
+    AttProvider->>OpenAI: Analyze Fitness Screenshot
+    OpenAI-->>AttProvider: Analysis Results (JSON: activity, distance, date)
     AttProvider->>AttProvider: Validate Results & Generate validationId
+    
     alt Validation Success
-        AttProvider->>+EvidenceEmitter: Call emitEvidence(...) tx
-        EvidenceEmitter-->>-AttProvider: Tx Confirmation (emitTxHash)
+        AttProvider->>EvidenceEmitter: Call emitEvidence(...) tx
+        EvidenceEmitter-->>AttProvider: Tx Confirmation (emitTxHash)
 
-        AttProvider->>+FDC_Hub: Submit JsonApi FDC Request (using validationId, provider endpoint)
-        FDC_Hub-->>-AttProvider: Tx Confirmation (JsonRoundId, JsonRequestBytes)
+        AttProvider->>FDC_Hub: Submit JsonApi FDC Request (using validationId, provider endpoint)
+        FDC_Hub-->>AttProvider: Tx Confirmation (JsonRoundId, JsonRequestBytes)
 
-        AttProvider->>+FDC_Hub: Submit EVMTransaction FDC Request (using emitTxHash)
-        FDC_Hub-->>-AttProvider: Tx Confirmation (EvmRoundId, EvmRequestBytes)
+        AttProvider->>FDC_Hub: Submit EVMTransaction FDC Request (using emitTxHash)
+        FDC_Hub-->>AttProvider: Tx Confirmation (EvmRoundId, EvmRequestBytes)
 
         AttProvider->>AttProvider: Store (validationId, JsonRoundId, JsonBytes, EvmRoundId, EvmBytes)
-        AttProvider-->>-Frontend: Verification Initiated (validationId)
+        AttProvider-->>Frontend: Verification Initiated (validationId)
 
         Note over Frontend, DA_Layer: Wait for FDC Rounds to finalize (~2-5 mins)...
 
-        Frontend->>+DA_Layer: Fetch Json Proof (JsonRoundId, JsonBytes)
-        DA_Layer-->>-Frontend: JsonApiProofData
+        Frontend->>DA_Layer: Fetch Json Proof (JsonRoundId, JsonBytes)
+        DA_Layer-->>Frontend: JsonApiProofData
 
-        Frontend->>+DA_Layer: Fetch EVM Proof (EvmRoundId, EvmBytes)
-        DA_Layer-->>-Frontend: EvmProofData
+        Frontend->>DA_Layer: Fetch EVM Proof (EvmRoundId, EvmBytes)
+        DA_Layer-->>Frontend: EvmProofData
 
-        Frontend->>+UserActions: Call processJsonApiProof(JsonApiProofData)
-        UserActions->>UserActions: Verify FDC Proof, Decode Result, Update Stage (-> JsonApiVerified or BothVerified)
-        UserActions-->>-Frontend: Tx Success/Failure
+        Frontend->>UserActions: Call processJsonApiProof(JsonApiProofData)
+        UserActions->>UserActions: Verify FDC Proof, Decode Result, Update Stage
+        UserActions-->>Frontend: Tx Success/Failure
 
-        Frontend->>+UserActions: Call processEvmProof(EvmProofData)
-        UserActions->>UserActions: Verify FDC Proof, Decode Event, Check Emitter Addr, Update Stage (-> EvmVerified or BothVerified)
+        Frontend->>UserActions: Call processEvmProof(EvmProofData)
+        UserActions->>UserActions: Verify FDC Proof, Decode Event, Check Emitter Addr, Update Stage
+        
         alt Both Proofs Processed Successfully
             UserActions->>UserActions: _recordAction(), emit ActionRecorded
         end
-        UserActions-->>-Frontend: Tx Success/Failure
-
-        Frontend-->>-User: Verification Complete (or Error)
+        
+        UserActions-->>Frontend: Tx Success/Failure
+        Frontend-->>User: Verification Complete (or Error)
+        
         Note over User, Frontend: User can now attempt to mint CarbonCreditNFT
     else Validation Failure
-        AttProvider-->>-Frontend: Verification Failed (Error details)
-        Frontend-->>-User: Action Could Not Be Verified
+        AttProvider-->>Frontend: Verification Failed (Error details)
+        Frontend-->>User: Action Could Not Be Verified
     end
 ```
 
